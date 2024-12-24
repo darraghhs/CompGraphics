@@ -20,6 +20,7 @@ include_directories(
 
 add_executable(render_scene
 	proj/scene.cpp
+	proj/render/shader.cpp
 )
 target_link_libraries(render_scene
 	${OPENGL_LIBRARY}

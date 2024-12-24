@@ -1,0 +1,13 @@
+C:/Users/darra/Comp_Graphics/final_proj/ninja/CMakeFiles/render_scene.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/CMakeFiles/edit_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/CMakeFiles/rebuild_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/CMakeFiles/edit_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/CMakeFiles/rebuild_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glad-3.3/CMakeFiles/glad.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glad-3.3/CMakeFiles/edit_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glad-3.3/CMakeFiles/rebuild_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glfw-3.1.2/CMakeFiles/edit_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glfw-3.1.2/CMakeFiles/rebuild_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glfw-3.1.2/src/CMakeFiles/glfw.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glfw-3.1.2/src/CMakeFiles/edit_cache.dir
+C:/Users/darra/Comp_Graphics/final_proj/ninja/external/glfw-3.1.2/src/CMakeFiles/rebuild_cache.dir
