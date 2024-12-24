@@ -5,7 +5,7 @@ uniform mat4 VP;
 const vec3 Pos[4] = vec3[4](
     vec3(-1.0, 0.0, -1.0),  // bottom left
     vec3(1.0, 0.0, -1.0),   // bottom right
-    vec3(-1.0, 0.0, 1.0),   // top right
+    vec3(1.0, 0.0, 1.0),   // top right
     vec3(-1.0, 0.0, 1.0)    // top left
 );
 

@@ -21,14 +21,14 @@ static GLFWwindow *window;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
 
 // OpenGL camera view parameters
-static glm::vec3 eye_center(0.0f, 0.0f, 0.0f);
+static glm::vec3 eye_center(0.0f, 50.0f, 50.0f);
 static glm::vec3 lookat(0, 0, 0);
 static glm::vec3 up(0, 1, 0);
 
 // View control 
-static float viewAzimuth = 0.5f;
-static float viewPolar = 0.5f;
-static float viewDistance = 50.0f;
+static float viewAzimuth = 0.0f;
+static float viewPolar = 0.0f;
+static float viewDistance = 1.0f;
 
 struct AxisXYZ {
     // A structure for visualizing the global 3D coordinate system 
@@ -127,23 +127,11 @@ struct AxisXYZ {
 
 struct Scene {
 
-    // Buffers
-    GLuint vertexArrayID; 
-	GLuint vertexBufferID; 
-
     // Shader variables
     GLuint vpMatrixID;
     GLuint programID;
 
     void init(){
-
-        // Creating VAO
-		glGenVertexArrays(1, &vertexArrayID);
-		glBindVertexArray(vertexArrayID);
-
-        // Creating VBO
-        //glGenBuffers(1, &vertexBufferID);
-		//glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
 
         // Create and compile our GLSL program from the shaders
         programID = LoadShadersFromFile("../proj/scene.vert", "../proj/scene.frag");
@@ -160,31 +148,16 @@ struct Scene {
         // Use shaders
         glUseProgram(programID);
 
-        // Enable VBO
-        glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
         // Passing vp to shader
-        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &cameraMatrix[0][0]);
+        glm::mat4 mvp = cameraMatrix;
+        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &mvp[0][0]);
 
-        	glDrawElements(
-			GL_TRIANGLES,      // mode
-			36,    			   // number of indices
-			GL_UNSIGNED_INT,   // type
-			(void*)0           // element array buffer offset
-		);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        glDisableVertexAttribArray(0);
     }
 
     void cleanup() {
-	    glDeleteBuffers(1, &vertexBufferID);
-	    //glDeleteBuffers(1, &colorBufferID);
-	    //glDeleteBuffers(1, &indexBufferID);
-	    //glDeleteVertexArrays(1, &vertexArrayID);
-	    //glDeleteBuffers(1, &uvBufferID);
-	    //glDeleteTextures(1, &textureID);
+
 	    glDeleteProgram(programID);
 	}
 
@@ -237,21 +210,21 @@ int main(void){
 	glDisable(GL_CULL_FACE);
 
     // Initialising scene
-    //Scene s;
-    //s.init();
+    Scene s;
+    s.init();
     AxisXYZ axis;
     axis.initialize();
 
     // Camera setup
-    /*
+    
     eye_center.y = viewDistance * cos(viewPolar);
     eye_center.x = viewDistance * cos(viewAzimuth);
     eye_center.z = viewDistance * sin(viewAzimuth);
-    */
+    
 
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
-	glm::float32 zFar = 10000.0f;
+	glm::float32 zFar = 500.0f;
 	glm::mat4 projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
     
 
@@ -262,7 +235,7 @@ int main(void){
 		glm::mat4 viewMatrix = glm::lookAt(eye_center, lookat, up);
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
-        //s.render();
+        s.render(vp);
         axis.render(vp);
 
         // Swap buffers
@@ -276,7 +249,7 @@ int main(void){
     while(!glfwWindowShouldClose(window));
 
     printf("Goodbye Scene!");
-    //s.cleanup();
+    s.cleanup();
     axis.cleanup();
     glfwTerminate();
     return 0;
@@ -292,38 +265,60 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 		eye_center.y = viewDistance * cos(viewPolar);
 		eye_center.x = viewDistance * cos(viewAzimuth);
 		eye_center.z = viewDistance * sin(viewAzimuth);
+        lookat.x = viewDistance * cos(viewAzimuth);
+        lookat.y = viewDistance * cos(viewPolar);
+        lookat.z = viewDistance * sin(viewAzimuth);
+
 		std::cout << "Reset." << std::endl;
 	}
 
 	if (key == GLFW_KEY_UP && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
 		viewPolar -= 0.1f;
-		eye_center.y = viewDistance * cos(viewPolar);
+		lookat.y = viewDistance * cos(viewPolar);
 	}
 
 	if (key == GLFW_KEY_DOWN && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
 		viewPolar += 0.1f;
-		eye_center.y = viewDistance * cos(viewPolar);
+		lookat.y = viewDistance * cos(viewPolar);
 	}
 
 	if (key == GLFW_KEY_LEFT && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
 		viewAzimuth -= 0.1f;
-		eye_center.x = viewDistance * cos(viewAzimuth);
-		eye_center.z = viewDistance * sin(viewAzimuth);
+		lookat.x = viewDistance * cos(viewAzimuth);
+        lookat.z = viewDistance * sin(viewAzimuth);
+
 	}
 
 	if (key == GLFW_KEY_RIGHT && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
 		viewAzimuth += 0.1f;
-		eye_center.x = viewDistance * cos(viewAzimuth);
-		eye_center.z = viewDistance * sin(viewAzimuth);
+		lookat.x = viewDistance * cos(viewAzimuth);
+        lookat.z = viewDistance * sin(viewAzimuth);
+
 	}
+
+    if (key == GLFW_KEY_W && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+		viewDistance -= 1.0f;
+        eye_center.x = viewDistance * cos(viewAzimuth);
+        eye_center.y = viewDistance * cos(viewPolar);
+        eye_center.z = viewDistance * sin(viewAzimuth);
+	}
+
+    if (key == GLFW_KEY_S && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+		viewDistance += 1.0f;
+        eye_center.x = viewDistance * cos(viewAzimuth);
+        eye_center.y = viewDistance * cos(viewPolar);
+        eye_center.z = viewDistance * sin(viewAzimuth);
+	}    
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
 
-    printf("Az: %f, Po: %f\n", viewAzimuth, viewPolar);
+    printf("Az: %f, Po: %f, dis: %f\n", viewAzimuth, viewPolar, viewDistance);
     printf("Eye center : %f, %f, %f\n", eye_center.x, eye_center.y, eye_center.z);
 }
