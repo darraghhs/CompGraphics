@@ -21,9 +21,10 @@ static GLFWwindow *window;
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
 
 // OpenGL camera view parameters
-static glm::vec3 eye_center(0.0f, 50.0f, 50.0f);
+static glm::vec3 eye_center(1.0f, 1.0f, 1.0f);
 static glm::vec3 lookat(0, 0, 0);
 static glm::vec3 up(0, 1, 0);
+float pi = 3.141592654;
 
 // View control 
 static float viewAzimuth = 0.0f;
@@ -216,11 +217,15 @@ int main(void){
     axis.initialize();
 
     // Camera setup
-    
-    eye_center.y = viewDistance * cos(viewPolar);
-    eye_center.x = viewDistance * cos(viewAzimuth);
-    eye_center.z = viewDistance * sin(viewAzimuth);
-    
+    eye_center.x = 0.0f;
+    eye_center.y = 1.0f;
+    eye_center.z = 0.0f;
+    viewAzimuth = 0.0f;
+    viewPolar = 0.0f;
+	lookat.x = eye_center.x + sin(viewAzimuth);
+    lookat.z = eye_center.z + cos(viewAzimuth);
+    lookat.y = 0.0f;
+
 
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
@@ -260,61 +265,77 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 {
 	if (key == GLFW_KEY_R && action == GLFW_PRESS)
 	{
-		viewAzimuth = 0.f;
-		viewPolar = 0.f;
-		eye_center.y = viewDistance * cos(viewPolar);
-		eye_center.x = viewDistance * cos(viewAzimuth);
-		eye_center.z = viewDistance * sin(viewAzimuth);
-        lookat.x = viewDistance * cos(viewAzimuth);
-        lookat.y = viewDistance * cos(viewPolar);
-        lookat.z = viewDistance * sin(viewAzimuth);
+		viewAzimuth = 0.0f;
+		viewPolar = 0.0f;
+		eye_center.y = 1.0f;
+		eye_center.x = 0.0f;
+		eye_center.z = 0.0f;
+		lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
+        lookat.y = 0.0f;
 
 		std::cout << "Reset." << std::endl;
 	}
 
 	if (key == GLFW_KEY_UP && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-		viewPolar -= 0.1f;
-		lookat.y = viewDistance * cos(viewPolar);
+	
+		lookat.y += 0.1f;
 	}
 
 	if (key == GLFW_KEY_DOWN && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-		viewPolar += 0.1f;
-		lookat.y = viewDistance * cos(viewPolar);
+		lookat.y -= 0.1f;
 	}
 
 	if (key == GLFW_KEY_LEFT && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-		viewAzimuth -= 0.1f;
-		lookat.x = viewDistance * cos(viewAzimuth);
-        lookat.z = viewDistance * sin(viewAzimuth);
-
+		viewAzimuth += 0.1f;
+		lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
 	}
 
 	if (key == GLFW_KEY_RIGHT && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-		viewAzimuth += 0.1f;
-		lookat.x = viewDistance * cos(viewAzimuth);
-        lookat.z = viewDistance * sin(viewAzimuth);
-
+		viewAzimuth -= 0.1f;
+		lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
 	}
 
     if (key == GLFW_KEY_W && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-		viewDistance -= 1.0f;
-        eye_center.x = viewDistance * cos(viewAzimuth);
-        eye_center.y = viewDistance * cos(viewPolar);
-        eye_center.z = viewDistance * sin(viewAzimuth);
+        eye_center.x += 0.1 * sin(viewAzimuth);
+        eye_center.z += 0.1 * cos(viewAzimuth);
+        lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
 	}
 
     if (key == GLFW_KEY_S && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-		viewDistance += 1.0f;
-        eye_center.x = viewDistance * cos(viewAzimuth);
-        eye_center.y = viewDistance * cos(viewPolar);
-        eye_center.z = viewDistance * sin(viewAzimuth);
+        eye_center.x -= 0.1 * sin(viewAzimuth);
+        eye_center.z -= 0.1 * cos(viewAzimuth);
+        lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
+	}
+
+    if (key == GLFW_KEY_A && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        float offset = viewAzimuth + pi;
+        eye_center.x -= 0.1 * cos(offset);
+        eye_center.z += 0.1 * sin(offset);
+        lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
 	}    
+
+    if (key == GLFW_KEY_D && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        float offset = viewAzimuth - pi;
+        eye_center.x += 0.1 * cos(offset);
+        eye_center.z -= 0.1 * sin(offset);
+        lookat.x = eye_center.x + sin(viewAzimuth);
+        lookat.z = eye_center.z + cos(viewAzimuth);
+	}    
+
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
