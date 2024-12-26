@@ -25,6 +25,7 @@ static glm::vec3 eye_center(1.0f, 1.0f, 1.0f);
 static glm::vec3 lookat(0, 0, 0);
 static glm::vec3 up(0, 1, 0);
 float pi = 3.141592654;
+float grid_size = 0.025;
 
 // View control 
 static float viewAzimuth = 0.0f;
@@ -130,6 +131,8 @@ struct Scene {
 
     // Shader variables
     GLuint vpMatrixID;
+    GLuint eyecenterID;
+    GLuint gridSizeID;
     GLuint programID;
 
     void init(){
@@ -142,16 +145,21 @@ struct Scene {
         }
 
         vpMatrixID = glGetUniformLocation(programID, "VP");
+        eyecenterID = glGetUniformLocation(programID, "camPos");
+        gridSizeID = glGetUniformLocation(programID, "gGridCCellSize");
     }
 
-    void render(glm::mat4 cameraMatrix){
+    void render(glm::mat4 cameraMatrix, glm::vec3 eyeCenter, float grid_size){
 
         // Use shaders
         glUseProgram(programID);
 
-        // Passing vp to shader
-        glm::mat4 mvp = cameraMatrix;
-        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &mvp[0][0]);
+        // Passing vp and camera position to shader
+        glm::mat4 vp = cameraMatrix;
+        glm::vec3 camPos = eyeCenter;
+        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &cameraMatrix[0][0]);
+        glUniform3fv(eyecenterID, 1, &camPos[0]);
+        glUniform1f(gridSizeID, grid_size);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -209,6 +217,8 @@ int main(void){
 
     glEnable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Initialising scene
     Scene s;
@@ -218,7 +228,7 @@ int main(void){
 
     // Camera setup
     eye_center.x = 0.0f;
-    eye_center.y = 1.0f;
+    eye_center.y = 0.1f;
     eye_center.z = 0.0f;
     viewAzimuth = 0.0f;
     viewPolar = 0.0f;
@@ -240,7 +250,7 @@ int main(void){
 		glm::mat4 viewMatrix = glm::lookAt(eye_center, lookat, up);
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
-        s.render(vp);
+        s.render(vp, eye_center, grid_size);
         axis.render(vp);
 
         // Swap buffers
@@ -267,7 +277,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 	{
 		viewAzimuth = 0.0f;
 		viewPolar = 0.0f;
-		eye_center.y = 1.0f;
+		eye_center.y = 0.1f;
 		eye_center.x = 0.0f;
 		eye_center.z = 0.0f;
 		lookat.x = eye_center.x + sin(viewAzimuth);
@@ -334,8 +344,31 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         eye_center.z -= 0.1 * sin(offset);
         lookat.x = eye_center.x + sin(viewAzimuth);
         lookat.z = eye_center.z + cos(viewAzimuth);
-	}    
+	}
 
+    if (key == GLFW_KEY_SPACE && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        eye_center.y += 0.1f;
+        lookat.y += 0.1f;
+	}
+
+    if (key == GLFW_KEY_LEFT_SHIFT && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        eye_center.y -= 0.1f;
+        lookat.y -= 0.1f;
+	}
+
+    if (key == GLFW_KEY_Z && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        grid_size -= .005;
+        printf("grid size: %f\n", grid_size);
+	}         
+
+    if (key == GLFW_KEY_X && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        grid_size += .005;
+        printf("grid size: %f\n", grid_size);
+	} 
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
