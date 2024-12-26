@@ -2,6 +2,7 @@ if(MSVC AND NOT "${MSVC_VERSION}" LESS 1400)
 	add_definitions( "/MP" )
 endif()
 
+
 ### GLAD ### 
 
 add_subdirectory (glad-3.3)

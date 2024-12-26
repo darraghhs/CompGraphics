@@ -3,6 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <util/array2d.h>
+#include <util/util.h>
 
 #include <render/shader.h>
 
@@ -72,7 +74,7 @@ struct AxisXYZ {
 	GLuint mvpMatrixID;
 	GLuint programID;
 
-	void initialize() {
+	void init() {
 		// Create a vertex array object
 		glGenVertexArrays(1, &vertexArrayID);
 		glBindVertexArray(vertexArrayID);
@@ -127,7 +129,7 @@ struct AxisXYZ {
 	}
 }; 
 
-struct Scene {
+struct Plane {
 
     // Shader variables
     GLuint vpMatrixID;
@@ -138,7 +140,7 @@ struct Scene {
     void init(){
 
         // Create and compile our GLSL program from the shaders
-        programID = LoadShadersFromFile("../proj/scene.vert", "../proj/scene.frag");
+        programID = LoadShadersFromFile("../proj/plane.vert", "../proj/plane.frag");
 
         if (programID == 0){
             std::cerr << "Failed to load shaders." << std::endl;
@@ -172,10 +174,152 @@ struct Scene {
 
 };
 
+struct  Terrain;
 
-
-int main(void){
+struct Triangles {
     
+    int m_width = 0;
+    int m_depth = 0;
+    GLuint VAO;
+    GLuint vertexBuffer;
+    GLuint indexBuffer;
+
+
+    void createTriangleList(int width, int depth, const Terrain* terrain){
+        
+        this->m_width = width;
+        this->m_depth = depth;
+
+        createGLState();
+
+    }
+
+    void createGLState(){
+        glGenVertexArrays(1, &VAO);
+        glBindVertexArray(VAO);
+
+        glGenBuffers(1, &vertexBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+
+        int pos_loc = 0;
+
+        glEnableVertexAttribArray(pos_loc);
+
+        size_t numFloats = 0;
+        glVertexAttribPointer(pos_loc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
+        numFloats += 3;
+    }
+
+    struct Vertex{
+        glm::vec3 pos;
+
+        void initVertex(const Terrain* terrain, int x, int z){
+            
+            this->pos = glm::vec3(x, 0.0f, z);
+        }
+    };
+
+    std::vector<Vertex> vertices;    
+    
+    void populateBuffers(const Terrain* terrain){
+        this->vertices.resize(this->m_width * this->m_depth);
+        printf("6.Vertices size: %d\n", this->vertices.size());
+        initVertices(terrain, this->vertices);
+
+        glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]), &this->vertices[0], GL_STATIC_DRAW);
+    }
+
+    void initVertices(const Terrain* terrain, std::vector<Vertex>& vertices){
+        int index = 0;
+
+        for(int z = 0; z < m_depth; z++) {
+            for(int x = 0; x < m_width; x++){
+                assert(index < this->vertices.size());
+                this->vertices[index].initVertex(terrain, x, z);
+                //printf("x: %f, y: %f z: %f\n", this->vertices[index].pos.x, this->vertices[index].pos.y, this->vertices[index].pos.z);
+                index++;
+            }
+        }
+        printf("7. Vertices initialised!\n");
+    }
+    void render(){
+        glBindVertexArray(VAO);
+
+        glDrawArrays(GL_POINTS, 0, m_depth * m_width);
+
+        glBindVertexArray(0);
+    }
+
+
+};
+
+struct Terrain {
+    GLuint programID;
+    GLuint vpMatrixID;
+    int m_terrainSize = 0;
+    Array2D<float> m_heightMap;
+    struct Triangles triangles;
+
+
+    void init(){
+          
+
+        // Create and compile our GLSL program from the shaders
+        programID = LoadShadersFromFile("../proj/terrain.vert", "../proj/terrain.frag");
+
+        if (programID == 0){
+            std::cerr << "Failed to load shaders." << std::endl;
+        }
+
+        printf("1. Shaders loaded\n");
+
+        vpMatrixID = glGetUniformLocation(programID, "VP");
+
+        this->LoadFromFile("../data/heightmap.save");
+
+        this->triangles.populateBuffers(this);
+
+
+    
+    }
+
+    void LoadFromFile(const char* pFilename){
+        
+        this->LoadHeightMap(pFilename);
+        printf("4. Height map loaded!\n");
+        this->triangles.createTriangleList(this->m_terrainSize, this->m_terrainSize, this);
+        printf("5.Triangles width: %d, depth: %d\n", this->triangles.m_width, this->triangles.m_depth);
+    }
+
+    void LoadHeightMap(const char* pFilename){
+        int fileSize = 0;
+        unsigned char* p = (unsigned char*)ReadBinaryFile(pFilename, fileSize);
+        printf("2. File size: %d\n", fileSize);
+        assert(fileSize % sizeof(float) == 0);
+        this->m_terrainSize = sqrt(fileSize / sizeof(float));
+        printf("3. terrain size: %d\n", this->m_terrainSize);
+
+        this->m_heightMap.InitArray2D(m_terrainSize, m_terrainSize, p);
+    }
+
+    float getHeight(int x, int z) const{
+        return this->m_heightMap.Get(x, z);
+    }
+
+    void render(glm::mat4 VP){
+
+        glUseProgram(programID);
+        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &VP[0][0]);
+
+        this->triangles.render();
+
+    }
+
+
+};
+
+int initWindow(){
+
     // Initialise GLFW
 	if (!glfwInit())
 	{
@@ -212,21 +356,12 @@ int main(void){
 		return -1;
 	}
 
-    // Setting background colour
-    glClearColor(1.0f, 1.0f, 1.0f, 0.0f);
+    return 0;
+}
 
-    glEnable(GL_DEPTH_TEST);
-	glDisable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+void initCamera(glm::mat4 &projectionMatrix){
 
-    // Initialising scene
-    Scene s;
-    s.init();
-    AxisXYZ axis;
-    axis.initialize();
-
-    // Camera setup
+     // Camera setup
     eye_center.x = 0.0f;
     eye_center.y = 0.1f;
     eye_center.z = 0.0f;
@@ -236,11 +371,41 @@ int main(void){
     lookat.z = eye_center.z + cos(viewAzimuth);
     lookat.y = 0.0f;
 
-
+    // Creating projection matrix
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
 	glm::float32 zFar = 500.0f;
-	glm::mat4 projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
+	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
+
+}
+
+int main(void){
+    
+    // Initialising window, glfw and opengl
+    if(initWindow() == -1){
+        return -1;
+    }
+
+    // Setting background colour
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+    glCullFace(GL_BACK);
+    glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Initialising scene
+    //Plane s;
+    //s.init();
+    AxisXYZ axis;
+    axis.init();
+    Terrain terrain;
+    terrain.init();
+
+    glm::mat4 projectionMatrix;
+
+    initCamera(projectionMatrix);
     
 
     do{
@@ -250,7 +415,8 @@ int main(void){
 		glm::mat4 viewMatrix = glm::lookAt(eye_center, lookat, up);
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
-        s.render(vp, eye_center, grid_size);
+        //s.render(vp, eye_center, grid_size);
+        terrain.render(vp);
         axis.render(vp);
 
         // Swap buffers
@@ -264,7 +430,7 @@ int main(void){
     while(!glfwWindowShouldClose(window));
 
     printf("Goodbye Scene!");
-    s.cleanup();
+    //s.cleanup();
     axis.cleanup();
     glfwTerminate();
     return 0;
@@ -314,8 +480,8 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     if (key == GLFW_KEY_W && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        eye_center.x += 0.1 * sin(viewAzimuth);
-        eye_center.z += 0.1 * cos(viewAzimuth);
+        eye_center.x += 1.0 * sin(viewAzimuth);
+        eye_center.z += 1.0 * cos(viewAzimuth);
         lookat.x = eye_center.x + sin(viewAzimuth);
         lookat.z = eye_center.z + cos(viewAzimuth);
 	}
@@ -361,18 +527,18 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_Z && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
         grid_size -= .005;
-        printf("grid size: %f\n", grid_size);
+        //printf("grid size: %f\n", grid_size);
 	}         
 
     if (key == GLFW_KEY_X && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
         grid_size += .005;
-        printf("grid size: %f\n", grid_size);
+        //printf("grid size: %f\n", grid_size);
 	} 
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
 
-    printf("Az: %f, Po: %f, dis: %f\n", viewAzimuth, viewPolar, viewDistance);
-    printf("Eye center : %f, %f, %f\n", eye_center.x, eye_center.y, eye_center.z);
+    //printf("Az: %f, Po: %f, dis: %f\n", viewAzimuth, viewPolar, viewDistance);
+    //printf("Eye center : %f, %f, %f\n", eye_center.x, eye_center.y, eye_center.z);
 }
