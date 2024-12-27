@@ -34,6 +34,10 @@ static float viewAzimuth = 0.0f;
 static float viewPolar = 0.0f;
 static float viewDistance = 1.0f;
 
+float randomFloat();
+int randomInt(int a, int b);
+int randomFloatRange(float a, float b);
+
 struct AxisXYZ {
     // A structure for visualizing the global 3D coordinate system 
 	
@@ -178,6 +182,9 @@ struct Terrain {
     int m_terrainSize = 0;
     int m_width = 0;
     int m_depth = 0;
+    float m_minHeight = 1.0f;
+    float m_maxHeight = 1.0f;
+    float m_worldScale = 1.0f;
     Array2D<float> m_heightMap;
      
     
@@ -187,19 +194,21 @@ struct Terrain {
 
     GLuint programID;
     GLuint vpMatrixID;
+    GLuint minID;
+    GLuint maxID;
 
     struct Vertex{
         glm::vec3 pos;
 
-        void initVertex(float y, int x, int z){
-            this->pos = glm::vec3(x, y, z);
+        void initVertex(float y, int x, int z, float scale){
+            this->pos = glm::vec3(x * scale, y, z * scale);
         }
     };
 
     std::vector<Vertex> vertices;
 
     void init(){
-          
+        this->m_worldScale = 1.0f;
         // Create and compile our GLSL program from the shaders
         programID = LoadShadersFromFile("../proj/terrain.vert", "../proj/terrain.frag");
 
@@ -210,6 +219,23 @@ struct Terrain {
         printf("1. Shaders loaded\n");
 
         vpMatrixID = glGetUniformLocation(programID, "VP");
+        minID = glGetUniformLocation(programID, "minHeight");
+        maxID = glGetUniformLocation(programID, "maxHeight");
+    }
+
+
+    void initMidPoint(){
+
+        this->init();
+
+        CreateMidpointDisplacement(this, 256, .8, 1, 60);
+
+        this->populateBuffers();
+    }
+
+    void initFromFile(){
+
+        this->init();
 
         this->LoadFromFile("../data/heightmap.save");
 
@@ -236,10 +262,10 @@ struct Terrain {
         this->m_heightMap.InitArray2D(m_terrainSize, m_terrainSize, p);
     }
 
-    void createTriangleList(int width, int depth, const Terrain* terrain){
+    void createTriangleList(int width, int depth, Terrain* terrain){
         
-        this->m_width = width;
-        this->m_depth = depth;
+        terrain->m_width = width;
+        terrain->m_depth = depth;
 
         createGLState();
 
@@ -254,6 +280,9 @@ struct Terrain {
 
         int pos_loc = 0;
 
+        glGenBuffers(1, &indexBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+
         glEnableVertexAttribArray(pos_loc);
 
         size_t numFloats = 0;
@@ -266,7 +295,37 @@ struct Terrain {
         printf("6.Vertices size: %d\n", this->vertices.size());
         initVertices();
 
+        std::vector<unsigned int> indices;
+        int  numQuads = (m_width - 1) * (m_depth - 1);
+        indices.resize(numQuads * 6);
+        initIndices(indices);
+
         glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]), &this->vertices[0], GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices[0]) * indices.size(), &indices[0], GL_STATIC_DRAW);
+    }
+
+    void initIndices(std::vector<unsigned int>& indices){
+        int index = 0;
+
+        for(int z = 0; z < m_depth - 1; z++){
+            for(int x = 0; x < m_width - 1; x++){
+                unsigned int bottomLeft = z * m_width + x;
+                unsigned int topLeft = (z + 1) * m_width + x;
+                unsigned int topRight = (z + 1) * m_width + (x + 1);
+                unsigned int bottomRight = z * m_width + (x + 1);
+
+                // Top left triangle
+                indices[index++] = bottomLeft;
+                indices[index++] = topLeft;
+                indices[index++] = topRight;
+
+                // Bottom right triangle
+                indices[index++] = bottomLeft;
+                indices[index++] = topRight;
+                indices[index++] = bottomRight;                
+
+            }
+        }
     }
 
     void initVertices(){
@@ -275,7 +334,7 @@ struct Terrain {
         for(int z = 0; z < m_depth; z++) {
             for(int x = 0; x < m_width; x++){
                 assert(index < this->vertices.size());
-                this->vertices[index].initVertex(this->getHeight(x, z), x, z);
+                this->vertices[index].initVertex(this->getHeight(x, z), x, z, this->m_worldScale);
                 //printf("x: %f, y: %f z: %f\n", this->vertices[index].pos.x, this->vertices[index].pos.y, this->vertices[index].pos.z);
                 index++;
             }
@@ -292,17 +351,115 @@ struct Terrain {
         glUseProgram(programID);
 
         glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &VP[0][0]);
+        glUniform1f(minID, this->m_minHeight);
+        glUniform1f(maxID, this->m_maxHeight);
 
         glBindVertexArray(VAO);
 
-        glDrawArrays(GL_POINTS, 0, m_depth * m_width);
+        glDrawElements(GL_TRIANGLES, (m_depth - 1) * (m_width - 1) * 6, GL_UNSIGNED_INT, NULL);
 
         glBindVertexArray(0);
 
     }
 
+    void diamondStep(Terrain* terrain, int rectSize, float currHeight){
+        int terrainSize = terrain->m_terrainSize;
+
+        int halfRectSize = rectSize / 2;
+
+        for(int y = 0; y < terrainSize; y += rectSize){
+            for(int x = 0; x < terrainSize; x += rectSize){
+                int next_x = (x + rectSize) % terrainSize;
+                int next_y = (y + rectSize) % terrainSize;
+
+                float topLeft = terrain->m_heightMap.Get(x, y);
+                float topRight = terrain->m_heightMap.Get(next_x, y);
+                float bottomLeft = terrain->m_heightMap.Get(x, next_y);
+                float bottomRight = terrain->m_heightMap.Get(next_x, next_y);
+
+                int mid_x = x + halfRectSize;
+                int mid_y = y + halfRectSize;
+
+                float randValue = 0;//randomFloatRange(currHeight, -currHeight);
+                float midPoint = (topLeft + topRight + bottomLeft + bottomRight) / 4.0f;
+
+                terrain->m_heightMap.Set(mid_x, mid_y, midPoint + randValue);
+            }
+        }
+    }
+
+    void squareStep(Terrain* terrain, int rectSize, float currHeight){
+        int terrainSize = terrain->m_terrainSize;
+
+        int halfRectSize = rectSize / 2;
+
+        for(int y = 0; y < terrainSize; y += rectSize){
+            for(int x = 0; x < terrainSize; x += rectSize){
+                int next_x = (x + rectSize) % terrainSize;
+                int next_y = (y + rectSize) % terrainSize;
+
+                int mid_x = x + halfRectSize;
+                int mid_y = y + halfRectSize;
+
+                int prev_mid_x = (x - halfRectSize + terrainSize) % terrainSize;
+                int prev_mid_y = (y - halfRectSize + terrainSize) % terrainSize;
+
+                float currTopLeft = terrain->m_heightMap.Get(x, y);
+                float currTopRight = terrain->m_heightMap.Get(next_x, y);
+                float currCenter = terrain->m_heightMap.Get(mid_x, mid_y);
+                float prevYCenter = terrain->m_heightMap.Get(mid_x, prev_mid_y);
+                float currBottomLeft = terrain->m_heightMap.Get(x, next_y);
+                float prevXCenter = terrain->m_heightMap.Get(prev_mid_x, mid_y);
+
+                float currLeftMid = (currTopLeft + currCenter + currBottomLeft + prevXCenter) / 4.0f + randomFloatRange(-currHeight, currHeight);
+                float currTopMid = (currTopLeft + currCenter + currTopRight + prevYCenter) / 4.0f + randomFloatRange(-currHeight, currHeight);
+
+                terrain->m_heightMap.Set(mid_x, y, currTopMid);
+                terrain->m_heightMap.Set(x, mid_y, currLeftMid);
+            }
+        }
+    }
+
+    void CreateMidpointDisplacementF32(Terrain* terrain, float roughness){
+        int rectSize = terrain->m_terrainSize;
+        float currHeight = (float)rectSize / 2.0f;
+        float heightReduce = pow(2.0f, -roughness);
+
+        while(rectSize > 0){
+
+            diamondStep(terrain, rectSize, currHeight);
+
+            squareStep(terrain, rectSize, currHeight);
+
+            rectSize /= 2;
+            currHeight *= heightReduce;
+        }
+    }
+
+    void CreateMidpointDisplacement(Terrain* terrain, int terrainSize, float roughness, float minHeight, float maxHeight){
+
+        if(roughness < 0.0f){
+            printf("Roughness must be positive!\n");
+            exit(0);
+        }
+
+        terrain->m_terrainSize = terrainSize;
+        terrain->m_minHeight = minHeight;
+        terrain->m_maxHeight = maxHeight;
+
+        terrain->m_heightMap.InitArray2D(terrainSize, terrainSize, 0.0f);
+
+        CreateMidpointDisplacementF32(terrain, roughness);
+
+        terrain->m_heightMap.Normalize(minHeight, maxHeight);
+
+        terrain->createTriangleList(terrain->m_terrainSize, terrain->m_terrainSize, terrain);
+        printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
+
+    }
 
 };
+
 
 int initWindow(){
 
@@ -348,19 +505,19 @@ int initWindow(){
 void initCamera(glm::mat4 &projectionMatrix){
 
      // Camera setup
-    eye_center.x = 0.0f;
-    eye_center.y = 0.1f;
-    eye_center.z = 0.0f;
-    viewAzimuth = 0.0f;
+    eye_center.x = -25.0f;
+    eye_center.y = 225.0f;
+    eye_center.z = -25.0f;
+    viewAzimuth = 0.8f;
     viewPolar = 0.0f;
 	lookat.x = eye_center.x + sin(viewAzimuth);
     lookat.z = eye_center.z + cos(viewAzimuth);
-    lookat.y = 0.0f;
+    lookat.y = eye_center.y;
 
     // Creating projection matrix
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
-	glm::float32 zFar = 500.0f;
+	glm::float32 zFar = 2000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
 }
@@ -387,7 +544,8 @@ int main(void){
     AxisXYZ axis;
     axis.init();
     Terrain terrain;
-    terrain.init();
+    srand(time(0));
+    terrain.initMidPoint();
 
     glm::mat4 projectionMatrix;
 
@@ -423,8 +581,11 @@ int main(void){
 }
 
 // Funtion runs when key is pressed
+float speed = 1.0f;
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode)
 {
+
+
 	if (key == GLFW_KEY_R && action == GLFW_PRESS)
 	{
 		viewAzimuth = 0.0f;
@@ -466,16 +627,16 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     if (key == GLFW_KEY_W && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        eye_center.x += 1.0 * sin(viewAzimuth);
-        eye_center.z += 1.0 * cos(viewAzimuth);
+        eye_center.x += speed * sin(viewAzimuth);
+        eye_center.z += speed * cos(viewAzimuth);
         lookat.x = eye_center.x + sin(viewAzimuth);
         lookat.z = eye_center.z + cos(viewAzimuth);
 	}
 
     if (key == GLFW_KEY_S && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        eye_center.x -= 0.1 * sin(viewAzimuth);
-        eye_center.z -= 0.1 * cos(viewAzimuth);
+        eye_center.x -= speed * sin(viewAzimuth);
+        eye_center.z -= speed * cos(viewAzimuth);
         lookat.x = eye_center.x + sin(viewAzimuth);
         lookat.z = eye_center.z + cos(viewAzimuth);
 	}
@@ -483,8 +644,8 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_A && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
         float offset = viewAzimuth + pi;
-        eye_center.x -= 0.1 * cos(offset);
-        eye_center.z += 0.1 * sin(offset);
+        eye_center.x -= speed * cos(offset);
+        eye_center.z += speed * sin(offset);
         lookat.x = eye_center.x + sin(viewAzimuth);
         lookat.z = eye_center.z + cos(viewAzimuth);
 	}    
@@ -492,35 +653,45 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_D && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
         float offset = viewAzimuth - pi;
-        eye_center.x += 0.1 * cos(offset);
-        eye_center.z -= 0.1 * sin(offset);
+        eye_center.x += speed * cos(offset);
+        eye_center.z -= speed * sin(offset);
         lookat.x = eye_center.x + sin(viewAzimuth);
         lookat.z = eye_center.z + cos(viewAzimuth);
 	}
 
     if (key == GLFW_KEY_SPACE && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        float speed = 1.0f;
         eye_center.y += speed;
         lookat.y += speed;
 	}
 
     if (key == GLFW_KEY_LEFT_SHIFT && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        float speed = 1.0f;
         eye_center.y -= speed;
         lookat.y -= speed;
 	}
 
+    if (key == GLFW_KEY_E && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        speed += 0.5f;
+        printf("speed: %f\n", speed);
+	} 
+
+    if (key == GLFW_KEY_Q && (action == GLFW_REPEAT || action == GLFW_PRESS))
+	{
+        speed -= 0.5f;
+        printf("speed: %f\n", speed);
+	}    
+
     if (key == GLFW_KEY_Z && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        grid_size -= .005;
+        grid_size -= .005f;
         //printf("grid size: %f\n", grid_size);
 	}         
 
     if (key == GLFW_KEY_X && (action == GLFW_REPEAT || action == GLFW_PRESS))
 	{
-        grid_size += .005;
+        grid_size += .005f;
         //printf("grid size: %f\n", grid_size);
 	} 
 
@@ -529,4 +700,31 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     //printf("Az: %f, Po: %f, dis: %f\n", viewAzimuth, viewPolar, viewDistance);
     //printf("Eye center : %f, %f, %f\n", eye_center.x, eye_center.y, eye_center.z);
+}
+
+float randomFloat(){
+
+    return(float)(rand()) / (float)(RAND_MAX);
+}
+
+int randomInt(int a, int b)
+{
+    if (a > b)
+        return randomInt(b, a);
+    if (a == b)
+        return a;
+    return a + (rand() % (b - a));
+} 
+
+int randomFloatRange(float a, float b){
+    //srand(time(0));
+
+    if(a > b){
+        return randomFloatRange(b, a);
+    }
+    if(a == b){
+        return a;
+    }
+
+    return(float)randomInt(a, b) + randomFloat();
 }
