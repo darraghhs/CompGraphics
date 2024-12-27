@@ -188,7 +188,6 @@ struct Terrain {
     float m_maxHeight = 1.0f;
     float m_worldScale = 1.0f;
     Array2D<float> m_heightMap;
-    Array2D<float> m_heightMap1;
     glm::vec3 lightDir = glm::vec3(1.0f, -1.0f, 1.0f);
 
      
@@ -196,7 +195,6 @@ struct Terrain {
     GLuint VAO;
     GLuint vertexBuffer;
     GLuint indexBuffer;
-    GLuint uvBufferID;
 
     GLuint programID;
     GLuint vpMatrixID;
@@ -219,34 +217,53 @@ struct Terrain {
 
     std::vector<Vertex> vertices;
 
+    Array2D<float> getHeightMap(){
+        return this->m_heightMap;
+    }
+
     void init(){
         this->m_worldScale = 1.0f;
         // Create and compile our GLSL program from the shaders
-        programID = LoadShadersFromFile("../proj/terrain.vert", "../proj/terrain.frag");
+        this->programID = LoadShadersFromFile("../proj/terrain.vert", "../proj/terrain.frag");
 
-        if (programID == 0){
+        if (this->programID == 0){
             std::cerr << "Failed to load shaders." << std::endl;
         }
 
         printf("1. Shaders loaded\n");
 
-        textureID = LoadTextureTileBox("../proj/textures/texture4.jpg");
+        this->textureID = LoadTextureTileBox("../proj/textures/texture4.jpg");
 
-        vpMatrixID = glGetUniformLocation(programID, "VP");
-        minID = glGetUniformLocation(programID, "minHeight");
-        maxID = glGetUniformLocation(programID, "maxHeight");
-        textureID = glGetUniformLocation(programID, "texSampler");
-        lightDirID = glGetUniformLocation(programID, "reversedLightDir");
-
+        this->vpMatrixID = glGetUniformLocation(this->programID, "VP");
+        this->minID = glGetUniformLocation(this->programID, "minHeight");
+        this->maxID = glGetUniformLocation(this->programID, "maxHeight");
+        this->textureID = glGetUniformLocation(this->programID, "texSampler");
+        this->lightDirID = glGetUniformLocation(this->programID, "reversedLightDir");
 
     }
 
+    void initTile(Array2D<float> heightMap, int terrainSize, float minHeight, float maxHeight){
+
+
+        this->init();
+
+        //CreateMidpointDisplacement(this, 8, 1, 220, 222);
+        this->m_terrainSize = terrainSize;
+        this->m_minHeight = minHeight;
+        this->m_maxHeight = maxHeight;
+        this->m_heightMap = heightMap;
+
+        this->createTriangleList(this->m_terrainSize, this->m_terrainSize, this);
+        printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
+
+        this->populateBuffers();
+    }
 
     void initMidPoint(){
 
         this->init();
 
-        CreateMidpointDisplacement(this, 512, 1, 1, 100);
+        CreateMidpointDisplacement(this, 8, 1, 220, 222);
 
         this->populateBuffers();
     }
@@ -290,18 +307,19 @@ struct Terrain {
     }
 
     void createGLState(){
+
         glGenVertexArrays(1, &VAO);
-        glBindVertexArray(VAO);
+        glBindVertexArray(this->VAO);
 
         glGenBuffers(1, &vertexBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, this->vertexBuffer);
+
+        glGenBuffers(1, &indexBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->indexBuffer);
 
         int pos_loc = 0;
         int tex_loc = 1;
         int norm_loc = 2;
-
-        glGenBuffers(1, &indexBuffer);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
 
         size_t numFloats = 0;
 
@@ -316,33 +334,36 @@ struct Terrain {
         glEnableVertexAttribArray(norm_loc);
         glVertexAttribPointer(norm_loc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
         numFloats += 3;
+
     }
 
     void populateBuffers(){
+
         this->vertices.resize(this->m_width * this->m_depth);
         printf("6.Vertices size: %d\n", this->vertices.size());
         initVertices();
 
         std::vector<unsigned int> indices;
-        int  numQuads = (m_width - 1) * (m_depth - 1);
+        int  numQuads = (this->m_width - 1) * (this->m_depth - 1);
         indices.resize(numQuads * 6);
         initIndices(indices);
 
         calcNormals(this->vertices, indices);
 
         glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]), &this->vertices[0], GL_STATIC_DRAW);
+
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices[0]) * indices.size(), &indices[0], GL_STATIC_DRAW);
     }
 
     void initIndices(std::vector<unsigned int>& indices){
         int index = 0;
 
-        for(int z = 0; z < m_depth - 1; z++){
-            for(int x = 0; x < m_width - 1; x++){
-                unsigned int bottomLeft = z * m_width + x;
-                unsigned int topLeft = (z + 1) * m_width + x;
-                unsigned int topRight = (z + 1) * m_width + (x + 1);
-                unsigned int bottomRight = z * m_width + (x + 1);
+        for(int z = 0; z < this->m_depth - 1; z++){
+            for(int x = 0; x < this->m_width - 1; x++){
+                unsigned int bottomLeft = z * this->m_width + x;
+                unsigned int topLeft = (z + 1) * this->m_width + x;
+                unsigned int topRight = (z + 1) * this->m_width + (x + 1);
+                unsigned int bottomRight = z * this->m_width + (x + 1);
 
                 // Top left triangle
                 indices[index++] = bottomLeft;
@@ -361,8 +382,8 @@ struct Terrain {
     void initVertices(){
         int index = 0;
 
-        for(int z = 0; z < m_depth; z++) {
-            for(int x = 0; x < m_width; x++){
+        for(int z = 0; z < this->m_depth; z++) {
+            for(int x = 0; x < this->m_width; x++){
                 assert(index < this->vertices.size());
                 this->vertices[index].initVertex(this->getHeight(x, z), x, z, this->m_worldScale, this->m_terrainSize);
                 //printf("x: %f, y: %f, z: %f, u: %f, v: %f\n", this->vertices[index].pos.x, this->vertices[index].pos.y, this->vertices[index].pos.z, this->vertices[index].tex.x, this->vertices[index].tex.y);
@@ -376,29 +397,43 @@ struct Terrain {
         return this->m_heightMap.Get(x, z);
     }
 
-    float getHeight1(int x, int z) const{
-        return this->m_heightMap1.Get(x, z);
-    }
-
     void render(glm::mat4 VP, glm::vec3 lightDir){
+        
+        glUseProgram(this->programID);
 
-        glUseProgram(programID);
+        glBindVertexArray(this->VAO);
 
-        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &VP[0][0]);
-        glUniform1f(minID, this->m_minHeight);
-        glUniform1f(maxID, this->m_maxHeight);
+        glBindBuffer(GL_ARRAY_BUFFER, this->vertexBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->indexBuffer);
 
+        int numFloats = 0;
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
+        numFloats += 3;
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
+        numFloats += 2;
+
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
+        numFloats += 3;
+
+
+
+        glUniformMatrix4fv(this->vpMatrixID, 1, GL_FALSE, &VP[0][0]);
+        glUniform1f(this->minID, this->m_minHeight);
+        glUniform1f(this->maxID, this->m_maxHeight);
         glm::vec3 reversedLightDir = lightDir * -1.0f;
         reversedLightDir = glm::normalize(reversedLightDir);
         glUniform3f(lightDirID, reversedLightDir.x, reversedLightDir.y, reversedLightDir.z);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glUniform1i(textureID, 0);
+        glBindTexture(GL_TEXTURE_2D, this->textureID);
+        glUniform1i(this->textureID, 0);
 
-        glBindVertexArray(VAO);
-
-        glDrawElements(GL_TRIANGLES, (m_depth - 1) * (m_width - 1) * 6, GL_UNSIGNED_INT, NULL);
+        glDrawElements(GL_TRIANGLES, (this->m_depth - 1) * (this->m_width - 1) * 6, GL_UNSIGNED_INT, NULL);
 
         glBindVertexArray(0);
 
@@ -422,7 +457,7 @@ struct Terrain {
                 int mid_x = x + halfRectSize;
                 int mid_y = y + halfRectSize;
 
-                float randValue = 0;//randomFloatRange(currHeight, -currHeight);
+                float randValue = randomFloatRange(currHeight, -currHeight);
                 float midPoint = (topLeft + topRight + bottomLeft + bottomRight) / 4.0f;
 
                 terrain->m_heightMap.Set(mid_x, mid_y, midPoint + randValue);
@@ -502,24 +537,6 @@ struct Terrain {
 
     }
 
-    void mirrorHeightMap(Terrain* terrain){
-        terrain->m_heightMap1.InitArray2D(terrain->m_terrainSize * 2, terrain->m_terrainSize * 2, 0.0f);
-
-        for(int z = 0; z < terrain->m_terrainSize; z++){
-            for(int x = 0; x < terrain->m_terrainSize; x++){
-                float y = terrain->m_heightMap.Get(x, z);
-                terrain->m_heightMap1.Set(x, z, y);
-            }
-        }
-
-        for(int z = terrain->m_terrainSize; z < terrain->m_terrainSize * 2; z++){
-            for(int x = 0; x < terrain->m_terrainSize; x++){
-                float y = terrain->m_heightMap.Get(x, (terrain->m_terrainSize * 2) - z);
-                terrain->m_heightMap1.Set(x, z, y);
-            }
-        }
-    }
-
     void calcNormals(std::vector<Vertex>& vertices, std::vector<uint>& indices){
         unsigned int index = 0;
 
@@ -543,6 +560,8 @@ struct Terrain {
     }
 
 };
+
+void resetEye(Terrain* terrain);
 
 
 int initWindow(){
@@ -601,10 +620,12 @@ void initCamera(glm::mat4 &projectionMatrix){
     // Creating projection matrix
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
-	glm::float32 zFar = 10000.0f;
+	glm::float32 zFar = 3000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
 }
+
+Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize);
 
 int main(void){
     
@@ -625,12 +646,26 @@ int main(void){
     // Initialising scene
     //Plane s;
     //s.init();
-    AxisXYZ axis;
-    axis.init();
+    //AxisXYZ axis;
+    //axis.init();
     Terrain terrain;
     srand(time(0));
     terrain.initMidPoint();
 
+    Terrain tile;
+
+    Array2D<float> flippedHeightMap = flipHeightMapX(terrain.m_heightMap, terrain.m_terrainSize);
+
+    /*for(int z = 0; z < terrain.m_depth; z++) {
+        for(int x = 0; x < terrain.m_width; x++){
+            printf("x: %d, z: %d, y: %f\n", x, z, flippedHeightMap.Get(x, z));
+        } 
+    }
+    */
+    
+
+
+    tile.initTile(flippedHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight);
     glm::mat4 projectionMatrix;
 
     initCamera(projectionMatrix);
@@ -639,6 +674,8 @@ int main(void){
     
 
     do{
+
+        resetEye(&terrain);
 
         light += 0.0002f;
 
@@ -652,7 +689,8 @@ int main(void){
 
         //s.render(vp, eye_center, grid_size);
         terrain.render(vp, lightDir);
-        axis.render(vp);
+        tile.render(vp, lightDir);
+        //axis.render(vp);
 
         // Swap buffers
         glfwSwapBuffers(window);
@@ -666,7 +704,7 @@ int main(void){
 
     printf("Goodbye Scene!");
     //s.cleanup();
-    axis.cleanup();
+    //axis.cleanup();
     glfwTerminate();
     return 0;
 }
@@ -842,4 +880,40 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
     stbi_image_free(img);
 
     return texture;
+}
+
+void resetEye(Terrain* terrain){
+    if(eye_center.x >= terrain->m_terrainSize * 2){
+        eye_center.x -= terrain->m_terrainSize * 2;
+    }
+
+    if(eye_center.z >= terrain->m_terrainSize * 2){
+        eye_center.z -= terrain->m_terrainSize * 2;
+    }
+
+    if(eye_center.x <= 0 - terrain->m_terrainSize){
+        eye_center.x += terrain->m_terrainSize * 2;
+    } 
+
+    if(eye_center.z <= 0 - terrain->m_terrainSize){
+        eye_center.z += terrain->m_terrainSize * 2;
+    } 
+}
+
+Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize){
+    
+    Array2D<float> out;
+
+    out.InitArray2D(terrainSize, terrainSize, 0.0f);
+
+    for(int z = 0; z < (int)terrainSize; z ++){
+        for(int x = 0; x < terrainSize; x++){
+            float y = heightMap.Get(x, (terrainSize - 1) - z);
+            out.Set(x, z, y);
+            
+        }
+    }
+
+    return out;
+
 }
