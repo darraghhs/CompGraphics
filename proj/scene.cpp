@@ -189,6 +189,8 @@ struct Terrain {
     float m_worldScale = 1.0f;
     Array2D<float> m_heightMap;
     Array2D<float> m_heightMap1;
+    glm::vec3 lightDir = glm::vec3(1.0f, -1.0f, 1.0f);
+
      
     
     GLuint VAO;
@@ -201,14 +203,17 @@ struct Terrain {
     GLuint minID;
     GLuint maxID;
     GLuint textureID;
+    GLuint lightDirID;
 
     struct Vertex{
         glm::vec3 pos;
         glm::vec2 tex;
+        glm::vec3 norm = glm::vec3(0.0f, 0.0f, 0.0f);
 
         void initVertex(float y, int x, int z, float scale, float terrainSize){
             this->pos = glm::vec3(x * scale, y, z * scale);
-            tex = glm::vec2((float)x / terrainSize, (float)z / terrainSize);
+            float terrainScale = terrainSize / 512;
+            tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), fmod((float)z / (terrainSize / terrainScale), 1));
         }
     };
 
@@ -225,12 +230,13 @@ struct Terrain {
 
         printf("1. Shaders loaded\n");
 
-        textureID = LoadTextureTileBox("../proj/textures/texture3.jpg");
+        textureID = LoadTextureTileBox("../proj/textures/texture4.jpg");
 
         vpMatrixID = glGetUniformLocation(programID, "VP");
         minID = glGetUniformLocation(programID, "minHeight");
         maxID = glGetUniformLocation(programID, "maxHeight");
         textureID = glGetUniformLocation(programID, "texSampler");
+        lightDirID = glGetUniformLocation(programID, "reversedLightDir");
 
 
     }
@@ -292,6 +298,7 @@ struct Terrain {
 
         int pos_loc = 0;
         int tex_loc = 1;
+        int norm_loc = 2;
 
         glGenBuffers(1, &indexBuffer);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -305,6 +312,10 @@ struct Terrain {
         glEnableVertexAttribArray(tex_loc);
         glVertexAttribPointer(tex_loc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
         numFloats += 2;
+
+        glEnableVertexAttribArray(norm_loc);
+        glVertexAttribPointer(norm_loc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
+        numFloats += 3;
     }
 
     void populateBuffers(){
@@ -316,6 +327,8 @@ struct Terrain {
         int  numQuads = (m_width - 1) * (m_depth - 1);
         indices.resize(numQuads * 6);
         initIndices(indices);
+
+        calcNormals(this->vertices, indices);
 
         glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]), &this->vertices[0], GL_STATIC_DRAW);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices[0]) * indices.size(), &indices[0], GL_STATIC_DRAW);
@@ -367,13 +380,17 @@ struct Terrain {
         return this->m_heightMap1.Get(x, z);
     }
 
-    void render(glm::mat4 VP){
+    void render(glm::mat4 VP, glm::vec3 lightDir){
 
         glUseProgram(programID);
 
         glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &VP[0][0]);
         glUniform1f(minID, this->m_minHeight);
         glUniform1f(maxID, this->m_maxHeight);
+
+        glm::vec3 reversedLightDir = lightDir * -1.0f;
+        reversedLightDir = glm::normalize(reversedLightDir);
+        glUniform3f(lightDirID, reversedLightDir.x, reversedLightDir.y, reversedLightDir.z);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureID);
@@ -503,6 +520,28 @@ struct Terrain {
         }
     }
 
+    void calcNormals(std::vector<Vertex>& vertices, std::vector<uint>& indices){
+        unsigned int index = 0;
+
+        for(unsigned int i = 0; i < indices.size(); i += 3){
+            unsigned int index0 = indices[i];
+            unsigned int index1 = indices[i + 1];
+            unsigned int index2 = indices[i + 2];
+            glm::vec3 v1 = vertices[index1].pos - vertices[index0].pos;
+            glm::vec3 v2 = vertices[index2].pos - vertices[index0].pos;
+            glm::vec3 normal = glm::cross(v1, v2);
+            normal = glm::normalize(normal);
+
+            vertices[index0].norm += normal;
+            vertices[index1].norm += normal;
+            vertices[index1].norm += normal;
+        }
+
+        for(unsigned int i = 0; i < vertices.size(); i++){
+            vertices[i].norm = glm::normalize(vertices[i].norm);
+        }
+    }
+
 };
 
 
@@ -576,11 +615,11 @@ int main(void){
 
     // Setting background colour
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-
-    glCullFace(GL_BACK);
+    glFrontFace(GL_CW);
+    glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
+    //glEnable(GL_BLEND);
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Initialising scene
@@ -589,23 +628,30 @@ int main(void){
     AxisXYZ axis;
     axis.init();
     Terrain terrain;
-    //srand(time(0));
+    srand(time(0));
     terrain.initMidPoint();
 
     glm::mat4 projectionMatrix;
 
     initCamera(projectionMatrix);
+
+    float light = 0.0f;
     
 
     do{
+
+        light += 0.0002f;
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glm::mat4 viewMatrix = glm::lookAt(eye_center, lookat, up);
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
+        float y = min(-0.4f, cosf(light));
+        glm::vec3 lightDir(sinf(light * 5.0f), y, cosf(light * 5.0f));
+
         //s.render(vp, eye_center, grid_size);
-        terrain.render(vp);
+        terrain.render(vp, lightDir);
         axis.render(vp);
 
         // Swap buffers
@@ -781,8 +827,8 @@ static GLuint LoadTextureTileBox(const char *texture_file_path) {
     glGenTextures(1, &texture);  
     glBindTexture(GL_TEXTURE_2D, texture);  
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
