@@ -38,6 +38,8 @@ float randomFloat();
 int randomInt(int a, int b);
 int randomFloatRange(float a, float b);
 
+static GLuint LoadTextureTileBox(const char *texture_file_path);
+
 struct AxisXYZ {
     // A structure for visualizing the global 3D coordinate system 
 	
@@ -186,22 +188,27 @@ struct Terrain {
     float m_maxHeight = 1.0f;
     float m_worldScale = 1.0f;
     Array2D<float> m_heightMap;
+    Array2D<float> m_heightMap1;
      
     
     GLuint VAO;
     GLuint vertexBuffer;
     GLuint indexBuffer;
+    GLuint uvBufferID;
 
     GLuint programID;
     GLuint vpMatrixID;
     GLuint minID;
     GLuint maxID;
+    GLuint textureID;
 
     struct Vertex{
         glm::vec3 pos;
+        glm::vec2 tex;
 
-        void initVertex(float y, int x, int z, float scale){
+        void initVertex(float y, int x, int z, float scale, float terrainSize){
             this->pos = glm::vec3(x * scale, y, z * scale);
+            tex = glm::vec2((float)x / terrainSize, (float)z / terrainSize);
         }
     };
 
@@ -218,9 +225,14 @@ struct Terrain {
 
         printf("1. Shaders loaded\n");
 
+        textureID = LoadTextureTileBox("../proj/textures/texture3.jpg");
+
         vpMatrixID = glGetUniformLocation(programID, "VP");
         minID = glGetUniformLocation(programID, "minHeight");
         maxID = glGetUniformLocation(programID, "maxHeight");
+        textureID = glGetUniformLocation(programID, "texSampler");
+
+
     }
 
 
@@ -228,7 +240,7 @@ struct Terrain {
 
         this->init();
 
-        CreateMidpointDisplacement(this, 256, .8, 1, 60);
+        CreateMidpointDisplacement(this, 512, 1, 1, 100);
 
         this->populateBuffers();
     }
@@ -279,15 +291,20 @@ struct Terrain {
         glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 
         int pos_loc = 0;
+        int tex_loc = 1;
 
         glGenBuffers(1, &indexBuffer);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
 
-        glEnableVertexAttribArray(pos_loc);
-
         size_t numFloats = 0;
+
+        glEnableVertexAttribArray(pos_loc);
         glVertexAttribPointer(pos_loc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
         numFloats += 3;
+
+        glEnableVertexAttribArray(tex_loc);
+        glVertexAttribPointer(tex_loc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
+        numFloats += 2;
     }
 
     void populateBuffers(){
@@ -334,8 +351,8 @@ struct Terrain {
         for(int z = 0; z < m_depth; z++) {
             for(int x = 0; x < m_width; x++){
                 assert(index < this->vertices.size());
-                this->vertices[index].initVertex(this->getHeight(x, z), x, z, this->m_worldScale);
-                //printf("x: %f, y: %f z: %f\n", this->vertices[index].pos.x, this->vertices[index].pos.y, this->vertices[index].pos.z);
+                this->vertices[index].initVertex(this->getHeight(x, z), x, z, this->m_worldScale, this->m_terrainSize);
+                //printf("x: %f, y: %f, z: %f, u: %f, v: %f\n", this->vertices[index].pos.x, this->vertices[index].pos.y, this->vertices[index].pos.z, this->vertices[index].tex.x, this->vertices[index].tex.y);
                 index++;
             }
         }
@@ -346,6 +363,10 @@ struct Terrain {
         return this->m_heightMap.Get(x, z);
     }
 
+    float getHeight1(int x, int z) const{
+        return this->m_heightMap1.Get(x, z);
+    }
+
     void render(glm::mat4 VP){
 
         glUseProgram(programID);
@@ -353,6 +374,10 @@ struct Terrain {
         glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &VP[0][0]);
         glUniform1f(minID, this->m_minHeight);
         glUniform1f(maxID, this->m_maxHeight);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glUniform1i(textureID, 0);
 
         glBindVertexArray(VAO);
 
@@ -453,9 +478,29 @@ struct Terrain {
 
         terrain->m_heightMap.Normalize(minHeight, maxHeight);
 
+        //mirrorHeightMap(terrain);
+
         terrain->createTriangleList(terrain->m_terrainSize, terrain->m_terrainSize, terrain);
         printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
 
+    }
+
+    void mirrorHeightMap(Terrain* terrain){
+        terrain->m_heightMap1.InitArray2D(terrain->m_terrainSize * 2, terrain->m_terrainSize * 2, 0.0f);
+
+        for(int z = 0; z < terrain->m_terrainSize; z++){
+            for(int x = 0; x < terrain->m_terrainSize; x++){
+                float y = terrain->m_heightMap.Get(x, z);
+                terrain->m_heightMap1.Set(x, z, y);
+            }
+        }
+
+        for(int z = terrain->m_terrainSize; z < terrain->m_terrainSize * 2; z++){
+            for(int x = 0; x < terrain->m_terrainSize; x++){
+                float y = terrain->m_heightMap.Get(x, (terrain->m_terrainSize * 2) - z);
+                terrain->m_heightMap1.Set(x, z, y);
+            }
+        }
     }
 
 };
@@ -517,7 +562,7 @@ void initCamera(glm::mat4 &projectionMatrix){
     // Creating projection matrix
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
-	glm::float32 zFar = 2000.0f;
+	glm::float32 zFar = 10000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
 }
@@ -544,7 +589,7 @@ int main(void){
     AxisXYZ axis;
     axis.init();
     Terrain terrain;
-    srand(time(0));
+    //srand(time(0));
     terrain.initMidPoint();
 
     glm::mat4 projectionMatrix;
@@ -727,4 +772,28 @@ int randomFloatRange(float a, float b){
     }
 
     return(float)randomInt(a, b) + randomFloat();
+}
+
+static GLuint LoadTextureTileBox(const char *texture_file_path) {
+    int w, h, channels;
+    uint8_t* img = stbi_load(texture_file_path, &w, &h, &channels, 3);
+    GLuint texture;
+    glGenTextures(1, &texture);  
+    glBindTexture(GL_TEXTURE_2D, texture);  
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    if (img) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    } else {
+        std::cout << "Failed to load texture " << texture_file_path << std::endl;
+    }
+    stbi_image_free(img);
+
+    return texture;
 }
