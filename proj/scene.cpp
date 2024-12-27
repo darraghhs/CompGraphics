@@ -189,6 +189,7 @@ struct Terrain {
     float m_worldScale = 1.0f;
     Array2D<float> m_heightMap;
     glm::vec3 lightDir = glm::vec3(1.0f, -1.0f, 1.0f);
+    glm::vec3 offset = glm::vec3();
 
      
     
@@ -197,7 +198,7 @@ struct Terrain {
     GLuint indexBuffer;
 
     GLuint programID;
-    GLuint vpMatrixID;
+    GLuint mvpMatrixID;
     GLuint minID;
     GLuint maxID;
     GLuint textureID;
@@ -221,7 +222,8 @@ struct Terrain {
         return this->m_heightMap;
     }
 
-    void init(){
+    void init(glm::vec3 offset){
+        this->offset = offset;
         this->m_worldScale = 1.0f;
         // Create and compile our GLSL program from the shaders
         this->programID = LoadShadersFromFile("../proj/terrain.vert", "../proj/terrain.frag");
@@ -234,7 +236,7 @@ struct Terrain {
 
         this->textureID = LoadTextureTileBox("../proj/textures/texture4.jpg");
 
-        this->vpMatrixID = glGetUniformLocation(this->programID, "VP");
+        this->mvpMatrixID = glGetUniformLocation(this->programID, "MVP");
         this->minID = glGetUniformLocation(this->programID, "minHeight");
         this->maxID = glGetUniformLocation(this->programID, "maxHeight");
         this->textureID = glGetUniformLocation(this->programID, "texSampler");
@@ -242,10 +244,10 @@ struct Terrain {
 
     }
 
-    void initTile(Array2D<float> heightMap, int terrainSize, float minHeight, float maxHeight){
+    void initTile(Array2D<float> heightMap, int terrainSize, float minHeight, float maxHeight, glm::vec3 offset){
 
 
-        this->init();
+        this->init(offset);
 
         //CreateMidpointDisplacement(this, 8, 1, 220, 222);
         this->m_terrainSize = terrainSize;
@@ -259,9 +261,9 @@ struct Terrain {
         this->populateBuffers();
     }
 
-    void initMidPoint(){
+    void initMidPoint(glm::vec3 offset){
 
-        this->init();
+        this->init(offset);
 
         CreateMidpointDisplacement(this, 8, 1, 220, 222);
 
@@ -270,7 +272,7 @@ struct Terrain {
 
     void initFromFile(){
 
-        this->init();
+        this->init(offset);
 
         this->LoadFromFile("../data/heightmap.save");
 
@@ -420,9 +422,12 @@ struct Terrain {
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(numFloats * sizeof(float)));
         numFloats += 3;
 
+        glm::mat4 modelMatrix = glm::mat4();
+        modelMatrix = glm::translate(modelMatrix, this->offset);
 
+        glm::mat4 MVP = VP * modelMatrix;
 
-        glUniformMatrix4fv(this->vpMatrixID, 1, GL_FALSE, &VP[0][0]);
+        glUniformMatrix4fv(this->mvpMatrixID, 1, GL_FALSE, &MVP[0][0]);
         glUniform1f(this->minID, this->m_minHeight);
         glUniform1f(this->maxID, this->m_maxHeight);
         glm::vec3 reversedLightDir = lightDir * -1.0f;
@@ -626,6 +631,7 @@ void initCamera(glm::mat4 &projectionMatrix){
 }
 
 Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize);
+Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize);
 
 int main(void){
     
@@ -650,11 +656,11 @@ int main(void){
     //axis.init();
     Terrain terrain;
     srand(time(0));
-    terrain.initMidPoint();
+    terrain.initMidPoint(glm::vec3(0, 0, 0));
 
     Terrain tile;
 
-    Array2D<float> flippedHeightMap = flipHeightMapX(terrain.m_heightMap, terrain.m_terrainSize);
+    Array2D<float> flippedHeightMap = flipHeightMapZ(terrain.m_heightMap, terrain.m_terrainSize);
 
     /*for(int z = 0; z < terrain.m_depth; z++) {
         for(int x = 0; x < terrain.m_width; x++){
@@ -665,7 +671,7 @@ int main(void){
     
 
 
-    tile.initTile(flippedHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight);
+    tile.initTile(flippedHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0));
     glm::mat4 projectionMatrix;
 
     initCamera(projectionMatrix);
@@ -675,7 +681,7 @@ int main(void){
 
     do{
 
-        resetEye(&terrain);
+        //resetEye(&terrain);
 
         light += 0.0002f;
 
@@ -908,7 +914,7 @@ Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize){
 
     for(int z = 0; z < (int)terrainSize; z ++){
         for(int x = 0; x < terrainSize; x++){
-            float y = heightMap.Get(x, (terrainSize - 1) - z);
+            float y = heightMap.Get(x, terrainSize - 1 - z);
             out.Set(x, z, y);
             
         }
@@ -917,3 +923,22 @@ Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize){
     return out;
 
 }
+
+Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize){
+    
+    Array2D<float> out;
+
+    out.InitArray2D(terrainSize, terrainSize, 0.0f);
+
+    for(int z = 0; z < (int)terrainSize; z ++){
+        for(int x = 0; x < terrainSize; x++){
+            float y = heightMap.Get(terrainSize - 1 -x, z);
+            out.Set(x, z, y);
+            
+        }
+    }
+
+    return out;
+
+}
+
