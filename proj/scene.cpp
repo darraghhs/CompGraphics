@@ -224,6 +224,10 @@ struct Terrain {
             else if(orientation == 2){
                 tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), 1.0f - fmod((float)z / (terrainSize / terrainScale), 1));
             }
+            // Flip uv around XZ
+            else if(orientation == 3){
+                tex = glm::vec2(1.0f - fmod((float)x / (terrainSize / terrainScale), 1), 1.0f - fmod((float)z / (terrainSize / terrainScale), 1));
+            }
         }
     };
 
@@ -255,7 +259,7 @@ struct Terrain {
 
     }
 
-    void initTile(Array2D<float> heightMap, int terrainSize, float minHeight, float maxHeight, glm::vec3 offset, int orientation){
+    void initTile(Array2D<float>& heightMap, int terrainSize, float minHeight, float maxHeight, glm::vec3 offset, int orientation){
 
 
         this->init(offset);
@@ -275,7 +279,7 @@ struct Terrain {
 
         this->init(offset);
 
-        CreateMidpointDisplacement(this, 1024, 1, 1, 200);
+        CreateMidpointDisplacement(this, 128, 1, 1, 50);
 
         this->populateBuffers(0);
     }
@@ -669,11 +673,44 @@ int main(void){
     srand(time(0));
     terrain.initMidPoint(glm::vec3(0, 0, 0));
 
-    Terrain tileX1;
-    Terrain tileX2;
+    Terrain tileMinusX1;
+    Terrain tileMinusX2;
 
-    Array2D<float> flippedHeightMap = flipHeightMapZ(terrain.m_heightMap, terrain.m_terrainSize);
+    Terrain tilePlusX1;
+    Terrain tilePlusX2;
+
+    Terrain tileMinusZ1;
+    Terrain tileMinusZ2;
+
+    Terrain tilePlusZ1;
+    Terrain tilePlusZ2;
+
+    Terrain tilePlusX1PlusZ1;
+    Terrain tilePlusX2PlusZ1;
+    Terrain tilePlusX1PlusZ2;
+    Terrain tilePlusX2PlusZ2;
+
+    Terrain tilePlusX1MinusZ1;
+    Terrain tilePlusX2MinusZ1;
+    Terrain tilePlusX1MinusZ2;
+    Terrain tilePlusX2MinusZ2;
+
+    Terrain tileMinusX1PlusZ1;
+    Terrain tileMinusX2PlusZ1;
+    Terrain tileMinusX1PlusZ2;
+    Terrain tileMinusX2PlusZ2;
+
+    Terrain tileMinusX1MinusZ1;
+    Terrain tileMinusX2MinusZ1;
+    Terrain tileMinusX1MinusZ2;
+    Terrain tileMinusX2MinusZ2;
+
+
+
     Array2D<float> originalHeightMap = copyHeightMap(terrain.m_heightMap, terrain.m_terrainSize);
+    Array2D<float> flippedHeightMapZ = flipHeightMapZ(originalHeightMap, terrain.m_terrainSize);
+    Array2D<float> flippedHeightMapX = flipHeightMapX(originalHeightMap, terrain.m_terrainSize);
+    Array2D<float> flippedHeightMapXZ = flipHeightMapX(flippedHeightMapZ, terrain.m_terrainSize);
     
 
 
@@ -686,11 +723,44 @@ int main(void){
     
 
 
-    tileX1.initTile(flippedHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0), 1);
+    tilePlusX1.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0), 1);
+    tilePlusX2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, 0), 1);
+
+    tileMinusX1.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(1.0f - terrain.m_terrainSize, 0, 0), 2);
+    tileMinusX2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, 0), 2);
+ 
+    tilePlusZ1.initTile(flippedHeightMapX, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(0, 0, terrain.m_terrainSize - 1.0f), 1);
+    tilePlusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(0, 0, (terrain.m_terrainSize - 1.0f) * 2.0f), 1);
+
+    tileMinusZ1.initTile(flippedHeightMapX, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(0, 0, 1.0f - terrain.m_terrainSize), 1);
+    tileMinusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(0, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 1);
+
+    tilePlusX1PlusZ1.initTile(flippedHeightMapXZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, terrain.m_terrainSize - 1.0f), 3);
+    tilePlusX2PlusZ1.initTile(flippedHeightMapX, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, terrain.m_terrainSize - 1.0f), 1);
+    tilePlusX1PlusZ2.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, (terrain.m_terrainSize - 1.0f) * 2.0f), 2);
+    tilePlusX2PlusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, (terrain.m_terrainSize - 1.0f) * 2.0f), 0);
+
+    tilePlusX1MinusZ1.initTile(flippedHeightMapXZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 1.0f - terrain.m_terrainSize), 3);
+    tilePlusX2MinusZ1.initTile(flippedHeightMapX, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, 1.0f - terrain.m_terrainSize), 1);
+    tilePlusX1MinusZ2.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 2);
+    tilePlusX2MinusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 0);
+
+    tileMinusX1PlusZ1.initTile(flippedHeightMapXZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(1.0f - terrain.m_terrainSize, 0, terrain.m_terrainSize - 1.0f), 3);
+    tileMinusX2PlusZ1.initTile(flippedHeightMapX, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, terrain.m_terrainSize - 1.0f), 1);
+    tileMinusX1PlusZ2.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(1.0f - terrain.m_terrainSize, 0, (terrain.m_terrainSize - 1.0f) * 2.0f), 2);
+    tileMinusX2PlusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, (terrain.m_terrainSize - 1.0f) * 2.0f), 0);
+
+    tileMinusX1MinusZ1.initTile(flippedHeightMapXZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(1.0f - terrain.m_terrainSize, 0, 1.0f - terrain.m_terrainSize), 3);
+    tileMinusX2MinusZ1.initTile(flippedHeightMapX, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, 1.0f - terrain.m_terrainSize), 1);
+    tileMinusX1MinusZ2.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(1.0f - terrain.m_terrainSize, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 2);
+    tileMinusX2MinusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 0);
+
+
+
+
+    //tileMinusX1.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize * 2) - 2.0f , 0, 0), 0);
+
     glm::mat4 projectionMatrix;
-
-    tileX2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize * 2) - 2.0f , 0, 0), 0);
-
     initCamera(projectionMatrix);
 
     float light = 0.0f;
@@ -698,7 +768,7 @@ int main(void){
 
     do{
 
-        resetEye(&terrain);
+        //resetEye(&terrain);
 
         light += 0.0002f;
 
@@ -711,9 +781,41 @@ int main(void){
         glm::vec3 lightDir(sinf(light * 5.0f), y, cosf(light * 5.0f));
 
         //s.render(vp, eye_center, grid_size);
+
         terrain.render(vp, lightDir);
-        tileX1.render(vp, lightDir);
-        tileX2.render(vp, lightDir);
+
+        tilePlusX1.render(vp, lightDir);
+        tilePlusX2.render(vp, lightDir);
+
+        tileMinusX1.render(vp, lightDir);
+        tileMinusX2.render(vp, lightDir);
+
+        tilePlusZ1.render(vp, lightDir);
+        tilePlusZ2.render(vp, lightDir);
+
+        tileMinusZ1.render(vp, lightDir);
+        tileMinusZ2.render(vp, lightDir);
+
+        tilePlusX1PlusZ1.render(vp, lightDir);
+        tilePlusX2PlusZ1.render(vp, lightDir);
+        tilePlusX1PlusZ2.render(vp, lightDir);
+        tilePlusX2PlusZ2.render(vp, lightDir);
+
+        tilePlusX1MinusZ1.render(vp, lightDir);
+        tilePlusX2MinusZ1.render(vp, lightDir);
+        tilePlusX1MinusZ2.render(vp, lightDir);
+        tilePlusX2MinusZ2.render(vp, lightDir);
+
+        tileMinusX1PlusZ1.render(vp, lightDir);
+        tileMinusX2PlusZ1.render(vp, lightDir);
+        tileMinusX1PlusZ2.render(vp, lightDir);
+        tileMinusX2PlusZ2.render(vp, lightDir);
+
+        tileMinusX1MinusZ1.render(vp, lightDir);
+        tileMinusX2MinusZ1.render(vp, lightDir);
+        tileMinusX1MinusZ2.render(vp, lightDir);
+        tileMinusX2MinusZ2.render(vp, lightDir);
+
         //axis.render(vp);
 
         // Swap buffers
@@ -950,7 +1052,7 @@ Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize){
 
     for(int z = 0; z < (int)terrainSize; z ++){
         for(int x = 0; x < terrainSize; x++){
-            float y = heightMap.Get(terrainSize - 1 -x, z);
+            float y = heightMap.Get(terrainSize - 1 - x, z);
             out.Set(x, z, y);
             
         }
@@ -976,5 +1078,6 @@ Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize){
     return out;
 
 }
+
 
 
