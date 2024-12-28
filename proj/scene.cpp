@@ -181,7 +181,7 @@ struct Plane {
 
 };
 
-struct Building {
+struct Skybox {
 	glm::vec3 position;		// Position of the box 
 	glm::vec3 scale;		// Size of the box in each axis
 	
@@ -369,30 +369,32 @@ struct Building {
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer_data), index_buffer_data, GL_STATIC_DRAW);
 
 		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../proj/box.vert", "../lab2/box.frag");
-		if (programID == 0)
+		this->programID = LoadShadersFromFile("../proj/box.vert", "../proj/box.frag");
+		if (this->programID == 0)
 		{
 			std::cerr << "Failed to load shaders." << std::endl;
 		}
 
 		// Get a handle for our "MVP" uniform
-		mvpMatrixID = glGetUniformLocation(programID, "MVP");
+		mvpMatrixID = glGetUniformLocation(this->programID, "MVP");
 
         // TODO: Load a texture 
         // --------------------
 
-		textureID = LoadTextureTileBox("../lab2/sky_debug.png");
+		this->textureID = LoadTextureTileBox("../proj/textures/sky.png");
 
         // --------------------
 
         // TODO: Get a handle to texture sampler 
         // -------------------------------------
-		textureSamplerID = glGetUniformLocation(programID,"textureSampler");
+		textureSamplerID = glGetUniformLocation(this->programID,"textureSampler");
         // -------------------------------------
 	}
 
-	void render(glm::mat4 cameraMatrix) {
-		glUseProgram(programID);
+	void render(glm::mat4& cameraMatrix) {
+		glUseProgram(this->programID);
+
+        glBindVertexArray(this->vertexArrayID);
 
 		glEnableVertexAttribArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
@@ -407,7 +409,7 @@ struct Building {
 		// TODO: Model transform 
 		// -----------------------
         glm::mat4 modelMatrix = glm::mat4();    
-		modelMatrix = glm::translate(modelMatrix, position);
+		modelMatrix = glm::translate(modelMatrix, eye_center);
         // Scale the box along each axis to make it look like a building
         modelMatrix = glm::scale(modelMatrix, scale);
         // -----------------------
@@ -424,7 +426,7 @@ struct Building {
 
 		// Set textureSampler to use texture unit 0
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textureID);
+		glBindTexture(GL_TEXTURE_2D, this->textureID);
 		glUniform1i(textureSamplerID, 0); 
 
         // ------------------------------------------
@@ -439,7 +441,9 @@ struct Building {
 
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
-        //glDisableVertexAttribArray(2);
+        glDisableVertexAttribArray(2);
+
+        glBindVertexArray(0);
 	}
 
 	void cleanup() {
@@ -475,6 +479,7 @@ struct Terrain {
     GLuint minID;
     GLuint maxID;
     GLuint textureID;
+    GLuint texSamplerID;
     GLuint lightDirID;
 
     struct Vertex{
@@ -527,7 +532,7 @@ struct Terrain {
         this->mvpMatrixID = glGetUniformLocation(this->programID, "MVP");
         this->minID = glGetUniformLocation(this->programID, "minHeight");
         this->maxID = glGetUniformLocation(this->programID, "maxHeight");
-        this->textureID = glGetUniformLocation(this->programID, "texSampler");
+        this->texSamplerID = glGetUniformLocation(this->programID, "texSampler");
         this->lightDirID = glGetUniformLocation(this->programID, "reversedLightDir");
 
     }
@@ -723,9 +728,13 @@ struct Terrain {
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, this->textureID);
-        glUniform1i(this->textureID, 0);
+        glUniform1i(this->texSamplerID, 0);
 
         glDrawElements(GL_TRIANGLES, (this->m_depth - 1) * (this->m_width - 1) * 6, GL_UNSIGNED_INT, NULL);
+
+        glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
 
         glBindVertexArray(0);
 
@@ -931,11 +940,11 @@ int main(void){
     }
 
     // Setting background colour
-    glClearColor(0.0f, 0.5f, 0.7f, 0.0f);
+    glClearColor(0.2f, 0.2f, 0.25f, 0.0f);
     glFrontFace(GL_CW);
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
+	//glEnable(GL_CULL_FACE);
     //glEnable(GL_BLEND);
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -944,6 +953,9 @@ int main(void){
     //s.init();
     //AxisXYZ axis;
     //axis.init();
+    Skybox b;
+    b.initialize(glm::vec3(0, 0, 0), glm::vec3(256, 256, 256));
+
     Terrain terrain;
     srand(time(0));
     terrain.initMidPoint(glm::vec3(0, 0, 0));
@@ -1031,10 +1043,6 @@ int main(void){
     tileMinusX2MinusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 0);
 
 
-
-
-    //tileMinusX1.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize * 2) - 2.0f , 0, 0), 0);
-
     glm::mat4 projectionMatrix;
     initCamera(projectionMatrix);
 
@@ -1056,6 +1064,11 @@ int main(void){
         glm::vec3 lightDir(sinf(light * 5.0f), y, cosf(light * 5.0f));
 
         //s.render(vp, eye_center, grid_size);
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_FALSE);
+        b.render(vp);
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS); 
 
         terrain.render(vp, lightDir);
 
@@ -1091,6 +1104,7 @@ int main(void){
         tileMinusX1MinusZ2.render(vp, lightDir);
         tileMinusX2MinusZ2.render(vp, lightDir);
 
+        
         //axis.render(vp);
 
         // Swap buffers
