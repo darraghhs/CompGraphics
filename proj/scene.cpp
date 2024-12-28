@@ -209,10 +209,21 @@ struct Terrain {
         glm::vec2 tex;
         glm::vec3 norm = glm::vec3(0.0f, 0.0f, 0.0f);
 
-        void initVertex(float y, int x, int z, float scale, float terrainSize){
+        void initVertex(float y, int x, int z, float scale, float terrainSize, int orientation){
             this->pos = glm::vec3(x * scale, y, z * scale);
             float terrainScale = terrainSize / 512;
-            tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), fmod((float)z / (terrainSize / terrainScale), 1));
+
+            if(orientation == 0){
+                tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), fmod((float)z / (terrainSize / terrainScale), 1));
+            }
+            // Flip uv around x axis
+            else if(orientation == 1){
+                tex = glm::vec2(1.0f - fmod((float)x / (terrainSize / terrainScale), 1), fmod((float)z / (terrainSize / terrainScale), 1));
+            }
+            // Flip uv around z axis
+            else if(orientation == 2){
+                tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), 1.0f - fmod((float)z / (terrainSize / terrainScale), 1));
+            }
         }
     };
 
@@ -244,12 +255,11 @@ struct Terrain {
 
     }
 
-    void initTile(Array2D<float> heightMap, int terrainSize, float minHeight, float maxHeight, glm::vec3 offset){
+    void initTile(Array2D<float> heightMap, int terrainSize, float minHeight, float maxHeight, glm::vec3 offset, int orientation){
 
 
         this->init(offset);
 
-        //CreateMidpointDisplacement(this, 8, 1, 220, 222);
         this->m_terrainSize = terrainSize;
         this->m_minHeight = minHeight;
         this->m_maxHeight = maxHeight;
@@ -258,16 +268,16 @@ struct Terrain {
         this->createTriangleList(this->m_terrainSize, this->m_terrainSize, this);
         printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
 
-        this->populateBuffers();
+        this->populateBuffers(orientation);
     }
 
     void initMidPoint(glm::vec3 offset){
 
         this->init(offset);
 
-        CreateMidpointDisplacement(this, 8, 1, 220, 222);
+        CreateMidpointDisplacement(this, 1024, 1, 1, 200);
 
-        this->populateBuffers();
+        this->populateBuffers(0);
     }
 
     void initFromFile(){
@@ -276,7 +286,7 @@ struct Terrain {
 
         this->LoadFromFile("../data/heightmap.save");
 
-        this->populateBuffers();
+        this->populateBuffers(0);
 
     }
 
@@ -339,11 +349,11 @@ struct Terrain {
 
     }
 
-    void populateBuffers(){
+    void populateBuffers(int orientation){
 
         this->vertices.resize(this->m_width * this->m_depth);
         printf("6.Vertices size: %d\n", this->vertices.size());
-        initVertices();
+        initVertices(orientation);
 
         std::vector<unsigned int> indices;
         int  numQuads = (this->m_width - 1) * (this->m_depth - 1);
@@ -381,13 +391,13 @@ struct Terrain {
         }
     }
 
-    void initVertices(){
+    void initVertices(int orientation){
         int index = 0;
 
         for(int z = 0; z < this->m_depth; z++) {
             for(int x = 0; x < this->m_width; x++){
                 assert(index < this->vertices.size());
-                this->vertices[index].initVertex(this->getHeight(x, z), x, z, this->m_worldScale, this->m_terrainSize);
+                this->vertices[index].initVertex(this->getHeight(x, z), x, z, this->m_worldScale, this->m_terrainSize, orientation);
                 //printf("x: %f, y: %f, z: %f, u: %f, v: %f\n", this->vertices[index].pos.x, this->vertices[index].pos.y, this->vertices[index].pos.z, this->vertices[index].tex.x, this->vertices[index].tex.y);
                 index++;
             }
@@ -625,13 +635,14 @@ void initCamera(glm::mat4 &projectionMatrix){
     // Creating projection matrix
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
-	glm::float32 zFar = 3000.0f;
+	glm::float32 zFar = 4000.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
 }
 
 Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize);
 Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize);
+Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize);
 
 int main(void){
     
@@ -658,9 +669,13 @@ int main(void){
     srand(time(0));
     terrain.initMidPoint(glm::vec3(0, 0, 0));
 
-    Terrain tile;
+    Terrain tileX1;
+    Terrain tileX2;
 
     Array2D<float> flippedHeightMap = flipHeightMapZ(terrain.m_heightMap, terrain.m_terrainSize);
+    Array2D<float> originalHeightMap = copyHeightMap(terrain.m_heightMap, terrain.m_terrainSize);
+    
+
 
     /*for(int z = 0; z < terrain.m_depth; z++) {
         for(int x = 0; x < terrain.m_width; x++){
@@ -671,8 +686,10 @@ int main(void){
     
 
 
-    tile.initTile(flippedHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0));
+    tileX1.initTile(flippedHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0), 1);
     glm::mat4 projectionMatrix;
+
+    tileX2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize * 2) - 2.0f , 0, 0), 0);
 
     initCamera(projectionMatrix);
 
@@ -681,7 +698,7 @@ int main(void){
 
     do{
 
-        //resetEye(&terrain);
+        resetEye(&terrain);
 
         light += 0.0002f;
 
@@ -695,7 +712,8 @@ int main(void){
 
         //s.render(vp, eye_center, grid_size);
         terrain.render(vp, lightDir);
-        tile.render(vp, lightDir);
+        tileX1.render(vp, lightDir);
+        tileX2.render(vp, lightDir);
         //axis.render(vp);
 
         // Swap buffers
@@ -941,4 +959,22 @@ Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize){
     return out;
 
 }
+
+Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize){
+    Array2D<float> out;
+
+    out.InitArray2D(terrainSize, terrainSize, 0.0f);
+
+    for(int z = 0; z < (int)terrainSize; z ++){
+        for(int x = 0; x < terrainSize; x++){
+            float y = heightMap.Get(x, z);
+            out.Set(x, z, y);
+            
+        }
+    }
+
+    return out;
+
+}
+
 
