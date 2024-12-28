@@ -41,146 +41,6 @@ int randomFloatRange(float a, float b);
 static GLuint LoadTerrainTexture(const char *texture_file_path);
 static GLuint LoadTextureTileBox(const char *texture_file_path);
 
-struct AxisXYZ {
-    // A structure for visualizing the global 3D coordinate system 
-	
-	GLfloat vertex_buffer_data[18] = {
-		// X axis
-		0.0, 0.0f, 0.0f, 
-		100.0f, 0.0f, 0.0f,
-		
-		// Y axis
-		0.0f, 0.0f, 0.0f, 
-		0.0f, 100.0f, 0.0f, 
-		
-		// Z axis
-		0.0f, 0.0f, 0.0f, 
-		0.0f, 0.0f, 100.0f,
-	};
-
-	GLfloat color_buffer_data[18] = {
-		// X, red
-		1.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-
-		// Y, green
-		0.0f, 1.0f, 0.0f, 
-		0.0f, 1.0f, 0.0f,
-
-		// Z, blue
-		0.0f, 0.0f, 1.0f, 
-		0.0f, 0.0f, 1.0f,
-	};
-
-	// OpenGL buffers
-	GLuint vertexArrayID; 
-	GLuint vertexBufferID; 
-	GLuint colorBufferID;
-
-	// Shader variable IDs
-	GLuint mvpMatrixID;
-	GLuint programID;
-
-	void init() {
-		// Create a vertex array object
-		glGenVertexArrays(1, &vertexArrayID);
-		glBindVertexArray(vertexArrayID);
-
-		// Create a vertex buffer object to store the vertex data		
-		glGenBuffers(1, &vertexBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_buffer_data), vertex_buffer_data, GL_STATIC_DRAW);
-
-		// Create a vertex buffer object to store the color data
-		glGenBuffers(1, &colorBufferID);
-		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(color_buffer_data), color_buffer_data, GL_STATIC_DRAW);
-
-		// Create and compile our GLSL program from the shaders
-		programID = LoadShadersFromFile("../proj/axis.vert", "../proj/axis.frag");
-		if (programID == 0)
-		{
-			std::cerr << "Failed to load shaders." << std::endl;
-		}
-
-		// Get a handle for our "MVP" uniform
-		mvpMatrixID = glGetUniformLocation(programID, "MVP");
-	}
-
-	void render(glm::mat4 cameraMatrix) {
-		glUseProgram(programID);
-
-		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-		glEnableVertexAttribArray(1);
-		glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-		glm::mat4 mvp = cameraMatrix;
-		glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, &mvp[0][0]);
-
-        // Draw the lines
-        glDrawArrays(GL_LINES, 0, 6);
-
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-	}
-
-	void cleanup() {
-		glDeleteBuffers(1, &vertexBufferID);
-		glDeleteBuffers(1, &colorBufferID);
-		glDeleteVertexArrays(1, &vertexArrayID);
-		glDeleteProgram(programID);
-	}
-}; 
-
-struct Plane {
-
-    // Shader variables
-    GLuint vpMatrixID;
-    GLuint eyecenterID;
-    GLuint gridSizeID;
-    GLuint programID;
-
-    void init(){
-
-        // Create and compile our GLSL program from the shaders
-        programID = LoadShadersFromFile("../proj/plane.vert", "../proj/plane.frag");
-
-        if (programID == 0){
-            std::cerr << "Failed to load shaders." << std::endl;
-        }
-
-        vpMatrixID = glGetUniformLocation(programID, "VP");
-        eyecenterID = glGetUniformLocation(programID, "camPos");
-        gridSizeID = glGetUniformLocation(programID, "gGridCCellSize");
-    }
-
-    void render(glm::mat4 cameraMatrix, glm::vec3 eyeCenter, float grid_size){
-
-        // Use shaders
-        glUseProgram(programID);
-
-        // Passing vp and camera position to shader
-        glm::mat4 vp = cameraMatrix;
-        glm::vec3 camPos = eyeCenter;
-        glUniformMatrix4fv(vpMatrixID, 1, GL_FALSE, &cameraMatrix[0][0]);
-        glUniform3fv(eyecenterID, 1, &camPos[0]);
-        glUniform1f(gridSizeID, grid_size);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    }
-
-    void cleanup() {
-
-	    glDeleteProgram(programID);
-	}
-
-};
-
 struct Skybox {
 	glm::vec3 position;		// Position of the box 
 	glm::vec3 scale;		// Size of the box in each axis
@@ -925,12 +785,12 @@ void initCamera(glm::mat4 &projectionMatrix){
 }
 
 
-
 void resetEye(Terrain* terrain);
 
 Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize);
 Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize);
 Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize);
+
 
 int main(void){
     
@@ -941,18 +801,12 @@ int main(void){
 
     // Setting background colour
     glClearColor(0.2f, 0.2f, 0.25f, 0.0f);
+
     glFrontFace(GL_CW);
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
-	//glEnable(GL_CULL_FACE);
-    //glEnable(GL_BLEND);
-    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Initialising scene
-    //Plane s;
-    //s.init();
-    //AxisXYZ axis;
-    //axis.init();
+
     Skybox b;
     b.initialize(glm::vec3(0, 0, 0), glm::vec3(256, 256, 256));
 
@@ -993,23 +847,12 @@ int main(void){
     Terrain tileMinusX2MinusZ2;
 
 
-
     Array2D<float> originalHeightMap = copyHeightMap(terrain.m_heightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapZ = flipHeightMapZ(originalHeightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapX = flipHeightMapX(originalHeightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapXZ = flipHeightMapX(flippedHeightMapZ, terrain.m_terrainSize);
+
     
-
-
-    /*for(int z = 0; z < terrain.m_depth; z++) {
-        for(int x = 0; x < terrain.m_width; x++){
-            printf("x: %d, z: %d, y: %f\n", x, z, flippedHeightMap.Get(x, z));
-        } 
-    }
-    */
-    
-
-
     tilePlusX1.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0), 1);
     tilePlusX2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, 0), 1);
 
@@ -1048,7 +891,6 @@ int main(void){
 
     float light = 0.0f;
     
-
     do{
 
         resetEye(&terrain);
@@ -1104,9 +946,6 @@ int main(void){
         tileMinusX1MinusZ2.render(vp, lightDir);
         tileMinusX2MinusZ2.render(vp, lightDir);
 
-        
-        //axis.render(vp);
-
         // Swap buffers
         glfwSwapBuffers(window);
 
@@ -1114,12 +953,12 @@ int main(void){
         glfwPollEvents();
 
     }
+
     // Check if esc was pressed or window was closed
     while(!glfwWindowShouldClose(window));
 
     printf("Goodbye Scene!");
-    //s.cleanup();
-    //axis.cleanup();
+
     glfwTerminate();
     return 0;
 }
