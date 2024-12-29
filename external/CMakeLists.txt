@@ -20,6 +20,14 @@ include_directories(
 	glfw-3.1.2/include/GLFW/
 )
 
+### assimp ###
+
+add_subdirectory(assimp)
+
+include_directories(
+	assimp/inlude/
+)
+
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 set(OPENGL_LIBRARY
 	${OPENGL_LIBRARY}

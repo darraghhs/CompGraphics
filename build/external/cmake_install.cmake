@@ -41,6 +41,7 @@ if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("C:/Users/darra/Comp_Graphics/final_proj/build/external/glad-3.3/cmake_install.cmake")
   include("C:/Users/darra/Comp_Graphics/final_proj/build/external/glfw-3.1.2/cmake_install.cmake")
+  include("C:/Users/darra/Comp_Graphics/final_proj/build/external/assimp/cmake_install.cmake")
 
 endif()
 

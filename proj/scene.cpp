@@ -349,7 +349,7 @@ struct Terrain {
 
         void initVertex(float y, int x, int z, float scale, float terrainSize, int orientation){
             this->pos = glm::vec3(x * scale, y, z * scale);
-            float terrainScale = terrainSize / 512;
+            float terrainScale = terrainSize / 1024;
 
             if(orientation == 0){
                 tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), fmod((float)z / (terrainSize / terrainScale), 1));
@@ -387,7 +387,7 @@ struct Terrain {
 
         printf("1. Shaders loaded\n");
 
-        this->textureID = LoadTerrainTexture("../proj/textures/texture4.jpg");
+        this->textureID = LoadTerrainTexture("../proj/textures/texture5.jpg");
 
         this->mvpMatrixID = glGetUniformLocation(this->programID, "MVP");
         this->minID = glGetUniformLocation(this->programID, "minHeight");
@@ -417,7 +417,7 @@ struct Terrain {
 
         this->init(offset);
 
-        CreateMidpointDisplacement(this, 1024, 1, 1, 350);
+        CreateMidpointDisplacement(this, 1024, 1.2, 1, 300);
 
         this->populateBuffers(0);
     }
@@ -767,9 +767,9 @@ int initWindow(){
 void initCamera(glm::mat4 &projectionMatrix){
 
      // Camera setup
-    eye_center.x = -25.0f;
-    eye_center.y = 225.0f;
-    eye_center.z = -25.0f;
+    eye_center.x = 500.0f;
+    eye_center.y = 300.0f;
+    eye_center.z = 500.0f;
     viewAzimuth = 0.8f;
     viewPolar = 0.0f;
 	lookat.x = eye_center.x + sin(viewAzimuth);
@@ -845,7 +845,6 @@ int main(void){
     Terrain tileMinusX2MinusZ1;
     Terrain tileMinusX1MinusZ2;
     Terrain tileMinusX2MinusZ2;
-
 
     Array2D<float> originalHeightMap = copyHeightMap(terrain.m_heightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapZ = flipHeightMapZ(originalHeightMap, terrain.m_terrainSize);

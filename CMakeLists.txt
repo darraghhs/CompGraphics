@@ -15,6 +15,7 @@ include_directories(
 	external/glm-0.9.7.1/
 	external/tinygltf-2.9.3/
 	external/glad-3.3/include/
+	external/assimp/include/
 	external/
 	proj/util/
 	proj/
@@ -29,4 +30,5 @@ target_link_libraries(render_scene
 	${OPENGL_LIBRARIES}
 	glfw
 	glad
+	assimp
 )
