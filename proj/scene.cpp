@@ -8,15 +8,17 @@
 
 #include <render/shader.h>
 
-#include<assimp/Importer.hpp>
-#include<assimp/scene.h>
-#include<assimp/postprocess.h>
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
+#include <iomanip>
 #include <vector>
 #include <iostream>
+#include <sstream>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -416,7 +418,7 @@ struct Terrain {
             std::cerr << "Failed to load shaders." << std::endl;
         }
 
-        printf("1. Shaders loaded\n");
+        //printf("1. Shaders loaded\n");
     	
         // Loading terrain texture
         this->textureID = LoadTerrainTexture("../proj/textures/texture5.jpg");
@@ -444,20 +446,20 @@ struct Terrain {
 
         // Setting size attributes and creating buffer objects
         this->setTrianglesSize(this->m_terrainSize, this->m_terrainSize, this);
-        printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
+        //printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
 
         // Populating buffer objects
         this->populateBuffers(orientation);
     }
 
     // Init function for main terrain tile, randomly proceduraly generates terrain using midpoint displacement algorithm
-    void initMidPoint(glm::vec3 offset){
+    void initMidPoint(glm::vec3 offset, float smoothness, float max_height){
         
         // Call general init function
         this->init(offset);
 
         // Generate heightmap using the midpoint displacement algorithm, then generate buffers
-        CreateMidpointDisplacement(this, 1024, 1.2, 1, 300);
+        CreateMidpointDisplacement(this, 1024, smoothness, 0, max_height);
 
         // Populating buffers
         this->populateBuffers(0);
@@ -547,7 +549,7 @@ struct Terrain {
 
         // Initialising vertcies array
         this->vertices.resize(this->m_width * this->m_depth);
-        printf("6.Vertices size: %d\n", this->vertices.size());
+        //printf("6.Vertices size: %d\n", this->vertices.size());
         initVertices(orientation);
 
         // Initialising indices array
@@ -603,7 +605,7 @@ struct Terrain {
                 index++;
             }
         }
-        printf("7. Vertices initialised!\n");
+        //printf("7. Vertices initialised!\n");
     }
 
     // Getter for height of a specific point in the heightmap
@@ -757,7 +759,7 @@ struct Terrain {
         //mirrorHeightMap(terrain);
 
         terrain->setTrianglesSize(terrain->m_terrainSize, terrain->m_terrainSize, terrain);
-        printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
+        //printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
 
     }
 
@@ -829,11 +831,11 @@ int initWindow(){
 }
 
 // Sets initial camera variables
-void initCamera(glm::mat4 &projectionMatrix){
+void initCamera(glm::mat4 &projectionMatrix, float height){
 
      // Camera setup
     eye_center.x = 500.0f;
-    eye_center.y = 300.0f;
+    eye_center.y = height + 50.0f;
     eye_center.z = 500.0f;
     viewAzimuth = 0.8f;
     viewPolar = 0.0f;
@@ -844,9 +846,26 @@ void initCamera(glm::mat4 &projectionMatrix){
     // Creating projection matrix
     glm::float32 FoV = 60;
 	glm::float32 zNear = 0.1f; 
-	glm::float32 zFar = 1000.0f;
+	glm::float32 zFar = 1020.0f;
 	projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
 
+}
+
+int getUserInput(float& smoothness, float& height){
+    char in;
+    printf("Enter smoothness: ");
+    std::cin >> smoothness;
+    printf("Enter maximum terrain height:");
+    std::cin >> height;
+    printf("Generate terrain? (y/n): ");
+    std::cin >> in;
+
+    if(in == 'y' || in == 'Y'){
+        return 0;
+    }
+    else{
+        return -1;
+    }
 }
 
 // Declaring the reset eye function 
@@ -860,6 +879,11 @@ Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize);
 
 int main(void){
     
+    float smoothness, height;
+
+    if(getUserInput(smoothness, height) == -1){
+        return 0;
+    }
     // Initialising window, glfw and opengl
     if(initWindow() == -1){
         return -1;
@@ -881,7 +905,7 @@ int main(void){
 
     // Declare and init main terrain object with procedurally generated heightmap
     Terrain terrain;
-    terrain.initMidPoint(glm::vec3(0, 0, 0));
+    terrain.initMidPoint(glm::vec3(0, 0, 0), 1.2f, 300.0f);
 
     // Declare derived terrain tiles
     Terrain tileMinusX1;
@@ -957,15 +981,26 @@ int main(void){
 
     // Declare projetion matrix and init camera
     glm::mat4 projectionMatrix;
-    initCamera(projectionMatrix);
+    initCamera(projectionMatrix, height);
 
     // For dynamic directional light
     float light = 0.0f;
+
+	// Time and frame rate tracking
+	static double lastTime = glfwGetTime();
+	float time = 0.0f;			// Animation time 
+	float fTime = 0.0f;			// Time for measuring fps
+	unsigned long frames = 0;
+
     
     do{
 
         // Checking if camera has gone beyond boyndary and resetting if it has
         resetEye(&terrain);
+
+        double currentTime = glfwGetTime();
+        float deltaTime = float(currentTime - lastTime);
+		lastTime = currentTime;
 
         // Incrementing dynamic light position
         light += 0.001f;
@@ -1023,6 +1058,19 @@ int main(void){
         tileMinusX1MinusZ2.render(vp, lightDir);
         tileMinusX2MinusZ2.render(vp, lightDir);
 
+		// FPS tracking 
+		// Count number of frames over a few seconds and take average
+		frames++;
+		fTime += deltaTime;
+		if (fTime > 2.0f) {		
+			float fps = frames / fTime;
+			frames = 0;
+			fTime = 0;
+			
+			std::stringstream stream;
+			stream << std::fixed << std::setprecision(2) << "Lab 4 | Frames per second (FPS): " << fps;
+			glfwSetWindowTitle(window, stream.str().c_str());
+		}
         // Swap buffers
         glfwSwapBuffers(window);
 
