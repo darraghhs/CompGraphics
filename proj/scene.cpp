@@ -1089,7 +1089,7 @@ int main(void){
 }
 
 // Funtion runs when key is pressed
-float speed = 1.0f;
+float speed = 6.0f;
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode)
 {
 
