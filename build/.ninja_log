@@ -535,3 +535,7 @@
 5520	5617	7571364748464621	external/assimp/test/CMakeFiles/unit.dir/__/contrib/googletest/googletest/src/gtest-all.cc.obj	89b710e24b496289
 5570	5717	7571364748938627	render_scene.exe	c35a10387830ead8
 5619	6293	7571364749429952	unit.exe	d55be3d3bb0daf8e
+49	130	7571799438198274	CMakeFiles/render_scene.dir/proj/scene.cpp.obj	2bcbc8ab0336403c
+132	280	7571799439012192	render_scene.exe	c35a10387830ead8
+45	2865	7571981031223327	CMakeFiles/render_scene.dir/proj/scene.cpp.obj	2bcbc8ab0336403c
+2868	3016	7571981059391179	render_scene.exe	c35a10387830ead8

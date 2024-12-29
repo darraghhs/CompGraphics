@@ -38,13 +38,16 @@ static float viewAzimuth = 0.0f;
 static float viewPolar = 0.0f;
 static float viewDistance = 1.0f;
 
+// Declaring random funtions
 float randomFloat();
 int randomInt(int a, int b);
 int randomFloatRange(float a, float b);
 
+// Declaring texture loading functions
 static GLuint LoadTerrainTexture(const char *texture_file_path);
 static GLuint LoadTextureTileBox(const char *texture_file_path);
 
+// Skybox struct from lab
 struct Skybox {
 	glm::vec3 position;		// Position of the box 
 	glm::vec3 scale;		// Size of the box in each axis
@@ -321,23 +324,37 @@ struct Skybox {
 	}
 }; 
 
+// Terrain struct for terrain tiles
 struct Terrain {
+
+    // Length of the sides of the terrain
     int m_terrainSize = 0;
     int m_width = 0;
     int m_depth = 0;
+
+    // Min and max height of the terrain
     float m_minHeight = 1.0f;
     float m_maxHeight = 1.0f;
+
+    // Factor to scale the tiles if needed
     float m_worldScale = 1.0f;
+
+    // Height map for the terrain
     Array2D<float> m_heightMap;
+
+    // Light direction vector
     glm::vec3 lightDir = glm::vec3(1.0f, -1.0f, 1.0f);
+
+    // Terrain position offset
     glm::vec3 offset = glm::vec3();
 
      
-    
+    // Declaring OpenGL buffers
     GLuint VAO;
     GLuint vertexBuffer;
     GLuint indexBuffer;
 
+    // Declaring Shader ID and uniforms
     GLuint programID;
     GLuint mvpMatrixID;
     GLuint minID;
@@ -346,15 +363,20 @@ struct Terrain {
     GLuint texSamplerID;
     GLuint lightDirID;
 
+    // Struct to hold the attributes for each vertex
     struct Vertex{
+
+        // Position, UV and normals for each vertex
         glm::vec3 pos;
         glm::vec2 tex;
         glm::vec3 norm = glm::vec3(0.0f, 0.0f, 0.0f);
 
+        // Function to populate the vertex data
         void initVertex(float y, int x, int z, float scale, float terrainSize, int orientation){
             this->pos = glm::vec3(x * scale, y, z * scale);
             float terrainScale = terrainSize / 1024;
 
+            // Orients the texture to allow seamless tiling, works best if texture is same size as terrain
             if(orientation == 0){
                 tex = glm::vec2(fmod((float)x / (terrainSize / terrainScale), 1), fmod((float)z / (terrainSize / terrainScale), 1));
             }
@@ -373,26 +395,33 @@ struct Terrain {
         }
     };
 
+    // Vector of vertices
     std::vector<Vertex> vertices;
 
+    // Getter function for heightmap
     Array2D<float> getHeightMap(){
         return this->m_heightMap;
     }
 
+    // General init function
     void init(glm::vec3 offset){
         this->offset = offset;
         this->m_worldScale = 1.0f;
+
         // Create and compile our GLSL program from the shaders
         this->programID = LoadShadersFromFile("../proj/terrain.vert", "../proj/terrain.frag");
 
+        // Checking if shaders are valid
         if (this->programID == 0){
             std::cerr << "Failed to load shaders." << std::endl;
         }
 
         printf("1. Shaders loaded\n");
-
+    	
+        // Loading terrain texture
         this->textureID = LoadTerrainTexture("../proj/textures/texture5.jpg");
 
+        // Initialising uniforms
         this->mvpMatrixID = glGetUniformLocation(this->programID, "MVP");
         this->minID = glGetUniformLocation(this->programID, "minHeight");
         this->maxID = glGetUniformLocation(this->programID, "maxHeight");
@@ -401,49 +430,64 @@ struct Terrain {
 
     }
 
+    // Init function for secondary tiles, uses heightmap from main tile
     void initTile(Array2D<float>& heightMap, int terrainSize, float minHeight, float maxHeight, glm::vec3 offset, int orientation){
 
-
+        // Call general init function
         this->init(offset);
-
+    	
+        // Set attributes
         this->m_terrainSize = terrainSize;
         this->m_minHeight = minHeight;
         this->m_maxHeight = maxHeight;
         this->m_heightMap = heightMap;
 
-        this->createTriangleList(this->m_terrainSize, this->m_terrainSize, this);
+        // Setting size attributes and creating buffer objects
+        this->setTrianglesSize(this->m_terrainSize, this->m_terrainSize, this);
         printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
 
+        // Populating buffer objects
         this->populateBuffers(orientation);
     }
 
+    // Init function for main terrain tile, randomly proceduraly generates terrain using midpoint displacement algorithm
     void initMidPoint(glm::vec3 offset){
-
+        
+        // Call general init function
         this->init(offset);
 
+        // Generate heightmap using the midpoint displacement algorithm, then generate buffers
         CreateMidpointDisplacement(this, 1024, 1.2, 1, 300);
 
+        // Populating buffers
         this->populateBuffers(0);
     }
 
+    // Init funciton to initialise the terrain from a pre existing heightmap file, used for debugging
     void initFromFile(){
 
+        // Call general init function
         this->init(offset);
 
+        // Loading heightmap from file and generating buffers
         this->LoadFromFile("../data/heightmap.save");
-
+        
+        // Populating buffers
         this->populateBuffers(0);
 
     }
 
+    // Loads heightmap from specified file location then generates buffers
     void LoadFromFile(const char* pFilename){
         
         this->LoadHeightMap(pFilename);
         printf("4. Height map loaded!\n");
-        this->createTriangleList(this->m_terrainSize, this->m_terrainSize, this);
+        this->setTrianglesSize(this->m_terrainSize, this->m_terrainSize, this);
         printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
+
     }
 
+    // Loads heightmap from file location and stores it in 2D heightmap array
     void LoadHeightMap(const char* pFilename){
         int fileSize = 0;
         unsigned char* p = (unsigned char*)ReadBinaryFile(pFilename, fileSize);
@@ -455,7 +499,9 @@ struct Terrain {
         this->m_heightMap.InitArray2D(m_terrainSize, m_terrainSize, p);
     }
 
-    void createTriangleList(int width, int depth, Terrain* terrain){
+    // Sets width and depth of terrain then generates buffers
+    // Allows for rectangular terrains, not necessary could be removed
+    void setTrianglesSize(int width, int depth, Terrain* terrain){
         
         terrain->m_width = width;
         terrain->m_depth = depth;
@@ -464,6 +510,7 @@ struct Terrain {
 
     }
 
+    // Generates, binds and enables vertex array and buffer and index buffer
     void createGLState(){
 
         glGenVertexArrays(1, &VAO);
@@ -495,24 +542,31 @@ struct Terrain {
 
     }
 
+    // Populates buffers with data
     void populateBuffers(int orientation){
 
+        // Initialising vertcies array
         this->vertices.resize(this->m_width * this->m_depth);
         printf("6.Vertices size: %d\n", this->vertices.size());
         initVertices(orientation);
 
+        // Initialising indices array
         std::vector<unsigned int> indices;
         int  numQuads = (this->m_width - 1) * (this->m_depth - 1);
         indices.resize(numQuads * 6);
         initIndices(indices);
 
+        // Calculating normals for lighting
         calcNormals(this->vertices, indices);
 
+        // Vertex buffer
         glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(this->vertices[0]), &this->vertices[0], GL_STATIC_DRAW);
 
+        // Index buffer
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices[0]) * indices.size(), &indices[0], GL_STATIC_DRAW);
     }
 
+    // Function to initialise index array
     void initIndices(std::vector<unsigned int>& indices){
         int index = 0;
 
@@ -537,6 +591,7 @@ struct Terrain {
         }
     }
 
+    // Function to initialise vertex array
     void initVertices(int orientation){
         int index = 0;
 
@@ -551,10 +606,12 @@ struct Terrain {
         printf("7. Vertices initialised!\n");
     }
 
+    // Getter for height of a specific point in the heightmap
     float getHeight(int x, int z) const{
         return this->m_heightMap.Get(x, z);
     }
 
+    // Render function
     void render(glm::mat4 VP, glm::vec3 lightDir){
         
         glUseProgram(this->programID);
@@ -604,6 +661,7 @@ struct Terrain {
 
     }
 
+    // Diamond step for the midpoint displacement algo
     void diamondStep(Terrain* terrain, int rectSize, float currHeight){
         int terrainSize = terrain->m_terrainSize;
 
@@ -629,7 +687,7 @@ struct Terrain {
             }
         }
     }
-
+    // Square step for the midpoint displacement algo
     void squareStep(Terrain* terrain, int rectSize, float currHeight){
         int terrainSize = terrain->m_terrainSize;
 
@@ -661,7 +719,7 @@ struct Terrain {
             }
         }
     }
-
+    // Calls diamond and square steps
     void CreateMidpointDisplacementF32(Terrain* terrain, float roughness){
         int rectSize = terrain->m_terrainSize;
         float currHeight = (float)rectSize / 2.0f;
@@ -678,6 +736,7 @@ struct Terrain {
         }
     }
 
+    // Implements Midpoint Displacement algorithm, loads resulting heightmap into heightmap attribute and generates buffers
     void CreateMidpointDisplacement(Terrain* terrain, int terrainSize, float roughness, float minHeight, float maxHeight){
 
         if(roughness < 0.0f){
@@ -697,11 +756,12 @@ struct Terrain {
 
         //mirrorHeightMap(terrain);
 
-        terrain->createTriangleList(terrain->m_terrainSize, terrain->m_terrainSize, terrain);
+        terrain->setTrianglesSize(terrain->m_terrainSize, terrain->m_terrainSize, terrain);
         printf("5.Triangles width: %d, depth: %d\n", this->m_width, this->m_depth);
 
     }
 
+    // Calculates normals
     void calcNormals(std::vector<Vertex>& vertices, std::vector<uint>& indices){
         unsigned int index = 0;
 
@@ -726,7 +786,7 @@ struct Terrain {
 
 };
 
-
+// Initialises OpenGL window and context as well as glfw and glad
 int initWindow(){
 
     // Initialise GLFW
@@ -768,6 +828,7 @@ int initWindow(){
     return 0;
 }
 
+// Sets initial camera variables
 void initCamera(glm::mat4 &projectionMatrix){
 
      // Camera setup
@@ -788,9 +849,10 @@ void initCamera(glm::mat4 &projectionMatrix){
 
 }
 
-
+// Declaring the reset eye function 
 void resetEye(Terrain* terrain);
 
+// Decclaring the heightmap flipper functions
 Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize);
 Array2D<float> flipHeightMapZ(Array2D<float>& heightMap, float terrainSize);
 Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize);
@@ -810,14 +872,18 @@ int main(void){
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
 
-
+    // Declare and init skybox
     Skybox b;
     b.initialize(glm::vec3(0, 0, 0), glm::vec3(256, 256, 256));
 
-    Terrain terrain;
+    // Seed rand() to allow heightmap to be randomly generated
     srand(time(0));
+
+    // Declare and init main terrain object with procedurally generated heightmap
+    Terrain terrain;
     terrain.initMidPoint(glm::vec3(0, 0, 0));
 
+    // Declare derived terrain tiles
     Terrain tileMinusX1;
     Terrain tileMinusX2;
 
@@ -850,12 +916,13 @@ int main(void){
     Terrain tileMinusX1MinusZ2;
     Terrain tileMinusX2MinusZ2;
 
+    // Create mirrored versions of the main heightmap to allow seamless tiling
     Array2D<float> originalHeightMap = copyHeightMap(terrain.m_heightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapZ = flipHeightMapZ(originalHeightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapX = flipHeightMapX(originalHeightMap, terrain.m_terrainSize);
     Array2D<float> flippedHeightMapXZ = flipHeightMapX(flippedHeightMapZ, terrain.m_terrainSize);
 
-    
+    // Init all tiles with respective heightmaps and offsets to tile a 5x5 grid
     tilePlusX1.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(terrain.m_terrainSize - 1.0f, 0, 0), 1);
     tilePlusX2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((terrain.m_terrainSize - 1.0f) * 2.0f, 0, 0), 1);
 
@@ -888,33 +955,40 @@ int main(void){
     tileMinusX1MinusZ2.initTile(flippedHeightMapZ, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3(1.0f - terrain.m_terrainSize, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 2);
     tileMinusX2MinusZ2.initTile(originalHeightMap, terrain.m_terrainSize, terrain.m_minHeight, terrain.m_maxHeight, glm::vec3((1.0f - terrain.m_terrainSize) * 2.0f, 0, (1.0f - terrain.m_terrainSize) * 2.0f), 0);
 
-
+    // Declare projetion matrix and init camera
     glm::mat4 projectionMatrix;
     initCamera(projectionMatrix);
 
+    // For dynamic directional light
     float light = 0.0f;
     
     do{
 
+        // Checking if camera has gone beyond boyndary and resetting if it has
         resetEye(&terrain);
 
+        // Incrementing dynamic light position
         light += 0.001f;
 
+        // Clearing color buffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // Setting VP matrix
 		glm::mat4 viewMatrix = glm::lookAt(eye_center, lookat, up);
 		glm::mat4 vp = projectionMatrix * viewMatrix;
 
+        // Setting light direction
         float y = min(-0.4f, cosf(light));
         glm::vec3 lightDir(sinf(light * 5.0f), y, cosf(light * 5.0f));
 
-        //s.render(vp, eye_center, grid_size);
+        // Rendering skybox
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
         b.render(vp);
         glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS); 
 
+        // Rendering terrain tiles
         terrain.render(vp, lightDir);
 
         tilePlusX1.render(vp, lightDir);
@@ -1087,7 +1161,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     //printf("Az: %f, Po: %f, dis: %f\n", viewAzimuth, viewPolar, viewDistance);
     //printf("Eye center : %f, %f, %f\n", eye_center.x, eye_center.y, eye_center.z);
 }
-
+// Random funcs used to randomly generate terrain
 float randomFloat(){
 
     return(float)(rand()) / (float)(RAND_MAX);
@@ -1114,7 +1188,7 @@ int randomFloatRange(float a, float b){
 
     return(float)randomInt(a, b) + randomFloat();
 }
-
+// Load terrain texture function
 static GLuint LoadTerrainTexture(const char *texture_file_path) {
     int w, h, channels;
     uint8_t* img = stbi_load(texture_file_path, &w, &h, &channels, 3);
@@ -1137,7 +1211,7 @@ static GLuint LoadTerrainTexture(const char *texture_file_path) {
 
     return texture;
 }
-
+//  Checks position of the camera and resets accordingly to simulate an endless terrain
 void resetEye(Terrain* terrain){
     if(eye_center.x >= terrain->m_terrainSize * 2){
         eye_center.x -= terrain->m_terrainSize * 2;
@@ -1155,7 +1229,7 @@ void resetEye(Terrain* terrain){
         eye_center.z += terrain->m_terrainSize * 2;
     } 
 }
-
+// Heightmap flipping functions
 Array2D<float> flipHeightMapX(Array2D<float>& heightMap, float terrainSize){
     
     Array2D<float> out;
@@ -1208,7 +1282,7 @@ Array2D<float> copyHeightMap(Array2D<float>& heightMap, float terrainSize){
     return out;
 
 }
-
+// Load skybox texture
 static GLuint LoadTextureTileBox(const char *texture_file_path) {
     int w, h, channels;
     uint8_t* img = stbi_load(texture_file_path, &w, &h, &channels, 3);
